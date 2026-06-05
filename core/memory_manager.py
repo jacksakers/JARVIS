@@ -42,4 +42,12 @@ class ConversationBuffer:
 
     def get_messages(self) -> list:
         """Returns the properly formatted list of messages to pass straight to Ollama."""
-        return [self.system_message] + self.history
+        # strip any duplicate messages that might have been added to the history (e.g., if the same assistant response was added multiple times due to a loop)
+        seen = set()
+        unique_history = []
+        for msg in self.history:
+            msg_tuple = (msg["role"], msg["content"])
+            if msg_tuple not in seen:
+                seen.add(msg_tuple)
+                unique_history.append(msg)
+        return [self.system_message] + unique_history

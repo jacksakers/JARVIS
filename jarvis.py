@@ -168,7 +168,7 @@ END OF RESPONSE
             "Let me think about that...",
             "I need to consider this carefully...",
             "Processing your request...",
-            f"{user_input}... Interesting question, let me analyze it...",
+            f"{user_input[:30]}... Interesting question, let me analyze it...",
         ]
 
         # Randomly select a thinking text to make it feel more natural
@@ -252,8 +252,8 @@ END OF RESPONSE
                         result_messages.append(msg)
                 
                 # Feed the result back to the LLM as a system message
-                messages.append({"system": "response", "content": f"Tool '{tool_name}' returned: {result}\nNow respond to the user based on this result."})
-                buffer.append("system", f"Tool '{tool_name}' returned: {result}\nNow respond to the user based on this result.")
+                messages.append({"role": "tool", "content": f"Tool '{tool_name}' returned: {result}\nNow respond to the user based on this result."})
+                buffer.append("tool", f"Tool '{tool_name}' returned: {result}\nNow respond to the user based on this result.")
                 
                 # Trigger a second LLM generation to formulate the final answer
                 print("JARVIS: ", end="", flush=True)
@@ -282,7 +282,7 @@ END OF RESPONSE
                 print(f"\n[Error: LLM tried to call a non-existent tool: {tool_name}]")
                 # Tell the LLM about the error so it can try again if it wants
                 error_message = f"Error: tool '{tool_name}' does not exist. Available tools are: {list(registry.tools.keys())}"
-                messages.append({"role": "system", "content": error_message})
+                messages.append({"role": "tool", "content": error_message})
                 buffer.append("system", error_message)
 
                 error_response = [
