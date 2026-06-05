@@ -30,6 +30,8 @@ class OllamaProvider(BaseLLM):
         Simple streaming generation with no tools.
         Used internally for summarisation and one-shot tasks.
         """
+        # Print what we are sending to Ollama for debugging (can be removed later)
+        print(f"\n[DEBUG] Sending to Ollama: {messages}\n")
         try:
             for chunk in self._client.chat(
                 model=self.model,
@@ -62,10 +64,16 @@ class OllamaProvider(BaseLLM):
         if tools:
             kwargs["tools"] = tools
 
+        # print what we are sending to Ollama for debugging (can be removed later)
+        print(f"\n[DEBUG] Sending to Ollama: {kwargs}\n")
+
         try:
             for chunk in self._client.chat(**kwargs):
+                # print the raw chunk for debugging (can be removed later)
+                # print(f"\n[DEBUG] Received chunk from Ollama: {chunk}\n")
                 tool_calls: Optional[List[ToolCall]] = None
                 if chunk.message.tool_calls:
+                    print(f"\n[DEBUG] Detected tool calls in chunk: {chunk.message.tool_calls}\n")
                     tool_calls = [
                         ToolCall(
                             name=tc.function.name,
