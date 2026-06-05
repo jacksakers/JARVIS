@@ -17,7 +17,6 @@ def main():
     llm_config = config.get("llm", {})
     provider_name = llm_config.get("provider")
     
-    # Initialize the LLM Provider based on config
     if provider_name == "ollama":
         llm = OllamaProvider(
             base_url=llm_config.get("ollama_url", "http://localhost:11434/api/chat"),
@@ -30,12 +29,10 @@ def main():
     print(f"Connected to {provider_name} using model: {llm_config.get('model')}")
     print("Type 'exit' or 'quit' to stop.\n")
 
-    # The System Context Array
     messages = [
         {"role": "system", "content": "You are JARVIS, a highly efficient local AI assistant. Keep responses concise."}
     ]
 
-    # The Main Event Loop
     while True:
         user_input = input("\nYou: ")
         if user_input.lower() in ['exit', 'quit']:
@@ -44,12 +41,17 @@ def main():
         
         messages.append({"role": "user", "content": user_input})
         
-        print("JARVIS: Thinking...")
-        response_text = llm.generate(messages)
+        print("JARVIS: ", end="", flush=True) # Start the line without a newline
         
-        print(f"JARVIS: {response_text}")
+        response_text = ""
+        # Iterate through the generator and print tokens instantly
+        for chunk in llm.generate(messages):
+            print(chunk, end="", flush=True)
+            response_text += chunk
+            
+        print() # Add a final newline when the stream finishes
         
-        # Append the response to maintain short-term chat history
+        # Append the full compiled response to history
         messages.append({"role": "assistant", "content": response_text})
 
 if __name__ == "__main__":
