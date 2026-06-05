@@ -19,5 +19,9 @@ class OllamaProvider(BaseLLM):
             response.raise_for_status() # Raise an exception for bad status codes
             data = response.json()
             return data.get("message", {}).get("content", "")
+        except requests.exceptions.HTTPError as e:
+            # This catches errors where Ollama is reached, but returns a 400 or 404 (like missing model)
+            return f"HTTP Error from Ollama: {response.status_code} - {response.text}"
         except requests.exceptions.RequestException as e:
-            return f"Error: Could not communicate with Ollama at {self.base_url}. Details: {str(e)}"
+            # This catches actual connection failures
+            return f"Error: Could not connect to Ollama at {self.base_url}. Details: {str(e)}"

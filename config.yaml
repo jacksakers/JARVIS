@@ -2,4 +2,4 @@ llm:
   provider: ollama
   ollama_url: http://localhost:11434/api/chat
   # Change this to whatever model you currently have pulled in Ollama
-  model: llama3.2
+  model: llama3.2:3B
