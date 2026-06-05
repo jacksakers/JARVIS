@@ -14,19 +14,23 @@ def load_config():
         sys.exit(1)
 
 def extract_tool_call(text: str) -> dict | None:
-    """Helper to find and parse XML tags inside the LLM's text output."""
-    # Matches <tag>value</tag> dynamically
-    tags = re.findall(r'<([^>]+)>(.*?)</\1>', text, re.DOTALL)
-    if not tags:
-        return None
-        
-    # Convert list of tuples into a dictionary
-    parsed = {k.strip(): v.strip() for k, v in tags}
+    """Helper to find plain text tool calls inside the LLM's text output."""
+    lines = text.strip().split('\n')
+    tool_name = None
+    args = {}
     
-    # If a <tool> tag exists, pop it out and treat the rest as arguments
-    if "tool" in parsed:
-        tool_name = parsed.pop("tool")
-        return {"tool": tool_name, "args": parsed}
+    for line in lines:
+        line = line.strip()
+        # Look for the exact TOOL trigger phrase
+        if line.startswith("TOOL:"):
+            tool_name = line.replace("TOOL:", "").strip()
+        # If we already found a tool, treat following lines as arguments if they have a colon
+        elif tool_name and ":" in line:
+            parts = line.split(":", 1)
+            args[parts[0].strip()] = parts[1].strip()
+            
+    if tool_name:
+        return {"tool": tool_name, "args": args}
         
     return None
 
@@ -65,17 +69,16 @@ You have access to the following tools:
 
 RULES FOR TOOLS:
 If you can answer the user's question normally, just talk to them.
-If you need to perform an action or get data, you MUST use XML tags instead of JSON.
-Provide the tool name in a <tool> tag, and any arguments as their own tags.
+If you need to perform an action or get data, you MUST use the plain text format below.
 
 Example without arguments:
-<tool>get_system_time</tool>
+TOOL: get_system_time
 
 Example with arguments:
-<tool>turn_off_lights</tool>
-<room>living_room</room>
+TOOL: turn_off_lights
+room: living_room
 
-Do not add any conversational text before or after the tags if you are calling a tool.
+Do not add any conversational text before or after if you are calling a tool.
 """
 
     messages = [
