@@ -1,6 +1,7 @@
 import yaml
 import sys
 from providers.ollama_provider import OllamaProvider
+from core.tool_registry import ToolRegistry
 
 def load_config():
     try:
@@ -13,6 +14,12 @@ def load_config():
 def main():
     print("Initializing JARVIS Framework...")
     config = load_config()
+    
+    # Initialize and run the Tool Registry
+    print("Scanning for skills...")
+    registry = ToolRegistry()
+    registry.discover_skills()
+    print(f"Discovered {len(registry.tools)} skill(s): {list(registry.tools.keys())}\n")
     
     llm_config = config.get("llm", {})
     provider_name = llm_config.get("provider")
