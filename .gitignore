@@ -3,3 +3,5 @@
 __pycache__/
 
 jarvis_memory.db
+
+tts_*

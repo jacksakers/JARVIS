@@ -7,7 +7,7 @@ import random
 from providers.ollama_provider import OllamaProvider
 from core.tool_registry import ToolRegistry
 from core.memory_manager import ConversationBuffer
-from core.tts_engine import speak
+from core.tts_engine import speak, stream_speak
 
 def load_config():
     try:
@@ -172,26 +172,39 @@ END OF RESPONSE
         ]
 
         # Randomly select a thinking text to make it feel more natural
-        speak(random.choice(thinking_text_options))
+        random_index = random.randint(0, len(thinking_text_options) - 1)
+        speak(thinking_text_options[random_index])
         
         print("\nJARVIS: ", end="", flush=True) # Start the line without a newline
         
         response_text = ""
+        sentence_buffer = "" # Buffer to hold the current sentence for TTS
+
         # Iterate through the generator and print tokens instantly
         # Print what is being sent to the LLM for debugging in a pretty way
         print(f"\n[Debug] Messages sent to LLM:\n{json.dumps(buffer.get_messages(), indent=2)}\n")
         for chunk in llm.generate(buffer.get_messages()):
             print(chunk, end="", flush=True)
             response_text += chunk
-            
+            sentence_buffer += chunk
+
+            # check if buffer ends with a sentence-ending punctuation to trigger TTS
+            if any(sentence_buffer.endswith(punct) for punct in [".", "!", "?", "\n", "?\n", ".\n", "!\n"]):
+                stream_speak(sentence_buffer.strip())
+                sentence_buffer = "" # Clear the buffer after speaking
+        
+        # catch any remaining text in the buffer that wasn't spoken yet
+        if sentence_buffer.strip():
+            stream_speak(sentence_buffer.strip())
+        
         print() # Add a final newline when the stream finishes
 
         spoken_text = response_text
         if "TOOL:" in spoken_text:
             spoken_text = spoken_text.split("TOOL:")[0].strip() # Only speak the part before the tool call
         
-        if spoken_text:
-            speak(spoken_text)
+        # if spoken_text:
+        #     speak(spoken_text)
         
         # Append the full compiled response to history
         messages.append({"role": "assistant", "content": response_text})
@@ -240,14 +253,23 @@ END OF RESPONSE
                 # Trigger a second LLM generation to formulate the final answer
                 print("JARVIS: ", end="", flush=True)
                 final_response = ""
+                final_sentence_buffer = ""
                 # Print what is being sent to the LLM for debugging in a pretty way
                 print(f"\n[Debug] Messages sent to LLM for final response:\n{json.dumps(result_messages, indent=2)}\n")
                 for chunk in llm.generate(result_messages):
                     print(chunk, end="", flush=True)
                     final_response += chunk
+                    final_sentence_buffer += chunk
+
+                    # check if buffer ends with a sentence-ending punctuation to trigger TTS
+                    if any(final_sentence_buffer.endswith(punct) for punct in [".", "!", "?", "\n", "?\n", ".\n", "!\n"]):
+                        stream_speak(final_sentence_buffer.strip())
+                        final_sentence_buffer = "" # Clear the buffer after speaking
                 print()
 
-                speak(final_response)
+
+
+                # speak(final_response)
                 
                 # Save the final response to history
                 messages.append({"role": "assistant", "content": final_response})
