@@ -13,14 +13,21 @@ def load_config():
         print("Error: config.yaml not found. Please ensure it is in the root directory.")
         sys.exit(1)
 
-def extract_json(text: str) -> dict | None:
-    """Helper to find and parse JSON inside the LLM's text output."""
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return None
+def extract_tool_call(text: str) -> dict | None:
+    """Helper to find and parse XML tags inside the LLM's text output."""
+    # Matches <tag>value</tag> dynamically
+    tags = re.findall(r'<([^>]+)>(.*?)</\1>', text, re.DOTALL)
+    if not tags:
+        return None
+        
+    # Convert list of tuples into a dictionary
+    parsed = {k.strip(): v.strip() for k, v in tags}
+    
+    # If a <tool> tag exists, pop it out and treat the rest as arguments
+    if "tool" in parsed:
+        tool_name = parsed.pop("tool")
+        return {"tool": tool_name, "args": parsed}
+        
     return None
 
 def main():
@@ -58,9 +65,17 @@ You have access to the following tools:
 
 RULES FOR TOOLS:
 If you can answer the user's question normally, just talk to them.
-If you need to perform an action or get data, you MUST output EXACTLY and ONLY a JSON object in this format:
-{{"tool": "tool_name", "args": {{"arg1": "value"}}}}
-Do not add any conversational text before or after the JSON if you are calling a tool.
+If you need to perform an action or get data, you MUST use XML tags instead of JSON.
+Provide the tool name in a <tool> tag, and any arguments as their own tags.
+
+Example without arguments:
+<tool>get_system_time</tool>
+
+Example with arguments:
+<tool>turn_off_lights</tool>
+<room>living_room</room>
+
+Do not add any conversational text before or after the tags if you are calling a tool.
 """
 
     messages = [
@@ -89,9 +104,9 @@ Do not add any conversational text before or after the JSON if you are calling a
         messages.append({"role": "assistant", "content": response_text})
 
         # --- NEW: TOOL INTERCEPTOR ---
-        tool_call = extract_json(response_text)
+        tool_call = extract_tool_call(response_text)
         
-        # If we found valid JSON and it has a "tool" key
+        # If we found valid XML and it has a "tool" key
         if tool_call and "tool" in tool_call:
             tool_name = tool_call["tool"]
             args = tool_call.get("args", {})
