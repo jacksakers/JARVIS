@@ -12,7 +12,10 @@ class OllamaProvider(BaseLLM):
         payload = {
             "model": self.model,
             "messages": messages,
-            "stream": True # Changed to True to enable streaming
+            "stream": True, # Changed to True to enable streaming
+            "options": {
+                "num_ctx": 8384,
+            }
         }
         
         try:
