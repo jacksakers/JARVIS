@@ -1,0 +1,12 @@
+# Core
+ollama          # Official Ollama Python SDK — handles tool calling natively
+pyyaml
+pydantic
+
+# CLI
+rich            # Coloured terminal output, spinners, panels
+prompt_toolkit  # Command-line input with history and readline keybindings
+
+# Voice
+edge_tts
+pygame

@@ -1,0 +1,20 @@
+llm:
+  provider: ollama
+  ollama_url: http://localhost:11434
+  # Change to any model you have pulled in Ollama
+  model: llama3.2:3b
+  options:
+    num_ctx: 8192
+    temperature: 0.7
+
+tts:
+  enabled: true
+  # Any voice from: https://tts.trafficmanager.net/cognitiveservices/voices/list
+  voice: en-GB-RyanNeural
+
+memory:
+  # How many completed conversation turns to keep in the active context window.
+  # Older turns are summarised and replaced with a compact text summary,
+  # which prevents the LLM from getting confused by stale tool-call structures.
+  max_recent_turns: 6
+  max_tokens: 5000
