@@ -1,0 +1,106 @@
+# Architecture Design Document: Project JARVIS Framework
+
+## 1. Design Philosophy
+The JARVIS framework is a bare-bones, lightweight Python orchestrator designed to coax agentic behavior out of constrained local LLMs. 
+* **Context-Minimal:** The LLM is never overwhelmed. It is given the absolute minimum context required to make the next decision.
+* **Plug-and-Play Skills:** Adding a capability is as simple as dropping a `.py` file into a specific folder. No central registry hardcoding is required.
+* **LLM Agnostic:** The intelligence engine is decoupled from the framework, allowing seamless swapping between local Ollama instances and cloud APIs (OpenAI, Anthropic).
+
+## 2. Directory Structure
+The framework relies on a strict, modular file hierarchy to enable auto-discovery.
+
+```text
+jarvis_framework/
+│
+├── jarvis.py                 # The Master Controller (Event Loop)
+├── config.yaml               # Global configurations (LLM choice, API keys)
+│
+├── core/
+│   ├── __init__.py
+│   ├── llm_provider.py       # Abstract Base Class for LLMs
+│   ├── prompt_manager.py     # Handles the dynamic context injection
+│   └── tool_registry.py      # The Auto-Discovery engine for skills
+│
+├── providers/                # Hot-swappable LLM adapters
+│   ├── ollama_provider.py
+│   └── openai_provider.py
+│
+└── skills/                   # Drop-in folder for tools
+    ├── __init__.py
+    ├── base_skill.py         # The template every skill must inherit from
+    ├── system_query.py       # The "Meta-Tool" (query_tools)
+    ├── kasa_lights.py        # Example skill
+    └── web_search.py         # Example skill
+3. Core Components
+3.1 The LLM Adapter Pattern (providers/)
+To make the LLM swappable, we use the Adapter design pattern. The master script only ever talks to a BaseLLM interface containing a single method: generate(prompt: list[dict]) -> str.
+
+If you change config.yaml from local_llama3 to openai_gpt4, jarvis.py seamlessly loads the openai_provider.py adapter. The rest of the framework doesn't know or care.
+
+3.2 The Skill Auto-Discovery Engine (core/tool_registry.py)
+When jarvis.py starts, it scans the skills/ directory. It looks for any Python file containing a class that inherits from BaseSkill.
+
+It extracts the name, description, keywords, and schema from each discovered skill.
+
+It builds a lightweight, in-memory dictionary of available tools. It does not pass this to the LLM yet.
+
+3.3 The Standardized Tool Schema
+Every skill adheres to a universal JSON contract. The LLM will always output JSON in this exact format to interact with the world:
+
+JSON
+{
+  "action": "call_tool",
+  "tool_name": "<name_of_tool>",
+  "arguments": {
+    "arg1": "value1",
+    "arg2": "value2"
+  }
+}
+4. The Agentic Loop (Execution Flow)
+This is the heartbeat of jarvis.py. It uses a multi-step loop to minimize context.
+
+Step 1: The Bare-Bones System Prompt
+The LLM is initialized with a tiny prompt:
+"You are JARVIS. Answer the user directly if you can. If you need to interact with the physical world, fetch real-time data, or perform an action, you MUST use the query_tools tool to find available skills."
+It is given only one tool schema: query_tools(keywords: list[str]).
+
+Step 2: User Request
+User: "Turn off the living room lights and lock the front door."
+
+Step 3: First Inference (The Router)
+The LLM realizes it cannot do this textually. It outputs:
+{"action": "call_tool", "tool_name": "query_tools", "arguments": {"keywords": ["lights", "doors", "home"]}}
+
+Step 4: Tool Registry Search
+jarvis.py catches this JSON. It searches the in-memory registry for the keywords. It finds kasa_lights.py and smart_locks.py.
+
+Step 5: Dynamic Context Injection
+jarvis.py replies to the LLM (as a system/tool response):
+"Found tools: [KasaLights(schema...), SmartLocks(schema...)]. Proceed."
+
+Step 6: Second Inference (The Executor)
+Now the LLM has the exact schemas it needs. It outputs:
+{"action": "call_tool", "tool_name": "KasaLights", "arguments": {"room": "living_room", "state": "off"}}
+
+Step 7: Physical Execution & Final Reply
+jarvis.py instantiates kasa_lights.py, passes the arguments, and executes it. The lights turn off. The script returns "Success" to the LLM. The LLM generates a final natural language reply to the user: "I have turned off the living room lights for you."
+
+5. Coding Practices & Standards
+To keep this maintainable and robust, the Python codebase must adhere to the following:
+
+Pydantic for Validation: Use the pydantic library in your BaseSkill class. This automatically validates the JSON arguments the LLM spits out. If the LLM hallucinates an argument, Pydantic catches it and jarvis.py can automatically ask the LLM to fix its JSON.
+
+Type Hinting: Extensive use of Python type hints (e.g., def execute(self, args: dict) -> str:) to ensure tools are built uniformly.
+
+Graceful Failure: If a tool fails (e.g., Kasa API is down), the Python script must catch the exception and return the error text to the LLM, allowing the LLM to say, "I tried, but the network connection to the lights timed out."
+
+Stateless Core: jarvis.py should remain completely stateless. All state (memory, chat history) should be managed by a dedicated memory.py module to prevent memory leaks during long uptimes.
+
+Code snippet
+
+### Next Steps for Development
+This architecture completely solves the "bloated prompt" issue. By forcing the AI to search for its own tools using a meta-tool, you can have 1,000 different Python scripts in your `skills/` folder, and the AI will still only consume the context tokens of the 1 or 2 tools it actually needs at that exact moment.
+
+To start actually coding this, I recommend we build the **Base Components** first. We should write the `BaseSkill` class template and the `tool_registry.py` auto-discovery script. 
+
+Would you like to start drafting the Python code for the `BaseSkill` template and the auto-discove

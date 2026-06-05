@@ -1,0 +1,77 @@
+# Architecture Design Document: JARVIS Memory & State Management
+
+## 1. Design Philosophy
+The Memory System provides JARVIS with long-term persistence and context. Because the core Python loop is stateless (to prevent RAM bloat and allow easy restarts), all user facts, preferences, and system states are stored in a local SQLite database. The LLM interacts with this database strictly through designated memory "Skills."
+
+## 2. Database Architecture (SQLite)
+We will use **SQLite**. It is a serverless, zero-configuration database that stores everything in a single `.db` file on your KAMRUI PC, making backups incredibly easy.
+
+To support the requested "keyword search" natively, we will utilize SQLite's **FTS5 (Full-Text Search)** virtual tables.
+
+### 2.1 Core Schema Design
+Instead of letting the LLM dynamically create literal SQL tables (which can lead to schema corruption with smaller models), we will use a flexible schema utilizing SQLite's native JSON capabilities. This gives the illusion of dynamic tables safely.
+
+*   **Table: `Core_Memories`** (Strict schema for identity and relationships)
+    *   `id` (Integer, Primary Key)
+    *   `entity` (Text) - e.g., "User", "Wife", "Dog", "Car"
+    *   `attribute` (Text) - e.g., "Favorite Food", "Birthday", "Model"
+    *   `value` (Text) - e.g., "Sushi", "October 12", "Toyota Tacoma"
+    *   `timestamp` (Datetime)
+
+*   **Table: `Dynamic_Records`** (Flexible schema for any new concept)
+    *   `id` (Integer)
+    *   `category` (Text) - e.g., "Recipe", "Project_Idea", "Workout_Plan"
+    *   `data` (JSON) - The LLM can shove whatever JSON structure it wants in here.
+
+*   **Virtual Table: `Memory_Index`** (FTS5)
+    *   A hidden search index automatically kept in sync with the tables above to allow ultra-fast keyword searches across all text.
+
+## 3. The Memory Skills (Tools)
+
+These tools will live in the `skills/` directory and will be discovered by the framework just like the Kasa lights or Weather tools.
+
+### Skill 1: `search_memory` (The Recall Tool)
+When the LLM encounters a prompt like, *"What was that idea I had for the Python script yesterday?"*
+1.  **LLM calls:** `{"action": "call_tool", "tool_name": "search_memory", "arguments": {"keywords": ["idea", "Python", "script"]}}`
+2.  **Python execution:** The script runs an FTS5 MATCH query against the SQLite database using the keywords.
+3.  **Return:** Retrieves the top 3-5 matches and feeds them back to the LLM's context window.
+
+### Skill 2: `save_memory` (The Learning Tool)
+When the user says, *"Remind me that my sister is allergic to peanuts."*
+1.  **LLM calls:** `{"action": "call_tool", "tool_name": "save_memory", "arguments": {"entity": "Sister", "attribute": "Allergy", "value": "Peanuts"}}`
+2.  **Python execution:** Inserts the row into `Core_Memories`.
+3.  **Return:** "Memory successfully saved."
+
+### Skill 3: `save_dynamic_record` (The "New Table" Illusion)
+If the user wants to start tracking something entirely new, like car maintenance.
+1.  **LLM calls:** `{"action": "call_tool", "tool_name": "save_dynamic_record", "arguments": {"category": "Car_Maintenance", "data": {"date": "2026-06-04", "action": "Oil Change", "mileage": 55000}}}`
+2.  **Python execution:** Saves the arbitrary JSON blob into the `Dynamic_Records` table.
+
+## 4. The Agentic Flow (Example)
+
+**User:** "Can you plan dinner for tonight based on my diet?"
+
+**Step 1: Context Routing**
+The LLM realizes it doesn't know the user's diet. It queries the tool registry for memory tools.
+
+**Step 2: Memory Retrieval**
+The LLM calls `search_memory` with arguments `{"keywords": ["diet", "food", "allergies", "dinner"]}`.
+
+**Step 3: Database Query**
+The Python SQLite wrapper runs: 
+`SELECT * FROM Memory_Index WHERE Memory_Index MATCH 'diet OR food OR allergies OR dinner';`
+
+**Step 4: Context Injection**
+Python returns the results to the LLM: 
+*System: Database returned: [Entity: User, Attribute: Diet, Value: Keto/Low-Carb], [Entity: User, Attribute: Dislikes, Value: Mushrooms].*
+
+**Step 5: Action/Final Response**
+The LLM now generates the dinner plan, perfectly tailored, without ever having the entire database loaded into its prompt.
+
+## 5. Maintenance and Cleanup
+To prevent the database from filling up with obsolete data (e.g., "User is going to the store in 5 minutes"), a background asynchronous task (`memory_manager.py`) can run nightly. It can prompt the LLM to review recent temporary memories and issue `DELETE` or `UPDATE` commands to consolidate facts.
+```eof
+
+By using SQLite's FTS5 extension and a JSON-column approach, you get the exact functionality of dynamically adding tables and doing semantic-style keyword searches, but with the safety and reliability that a smaller 3B-7B parameter model requires. 
+
+Are you happy with this data structure, or would you prefer we explore a full Vector Database (like ChromaDB or FAISS) which searches by *meaning* rather than exact *keywords*? For a Mini PC, SQLite is definitely lighter on the CPU and RAM!

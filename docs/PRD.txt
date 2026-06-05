@@ -1,0 +1,111 @@
+Product Requirements Document (PRD): Project JARVIS (Local AI Assistant)
+
+1. Product Vision
+
+To build a fully autonomous, highly extensible, local-first AI assistant running 24/7 on a dedicated KAMRUI mini PC. The assistant will manage home automation, organize personal data, execute background coding tasks, and provide a unified, remotely accessible conversational interface. All data remains 100% private.
+
+2. System Architecture
+
+Given the hardware constraints (Ryzen 4300U, 16GB RAM), the system will use a lightweight, modular architecture.
+
+Inference Engine: Ollama running as a background service.
+
+Orchestration Harness: A custom Python / FastAPI backend. This will act as the "brain," holding the system prompt, managing the tool schema, and maintaining chat history.
+
+Frontend Interface: A lightweight web UI (e.g., Open WebUI, Streamlit, or a custom HTML/JS frontend) served by the Python backend.
+
+Memory Storage: * Short-term: In-memory or Redis (current conversation context).
+
+Long-term (Semantic): Local Vector DB (like ChromaDB or Qdrant) to store user preferences and facts.
+
+Stateful (Transactional): SQLite for shopping lists, routines, and task queues.
+
+Remote Access: Tailscale subnet router to securely expose the web UI to your phone/laptop from anywhere without port forwarding.
+
+Automation Scheduler: APScheduler or a basic Python cron wrapper to trigger background agent tasks (like the coding agent or morning briefings).
+
+3. Core Features & Tool Extensibility
+
+The Python harness will use the LLM's function-calling capabilities. You will define a library of Python scripts ("Tools") that Ollama can request to execute.
+
+3.1 Home Automation (The "Hands")
+
+Kasa / Tapo Tool: Python scripts using the python-kasa and Tapo API libraries.
+
+LLM Prompt Capability: "Turn off the living room lights" -> LLM outputs JSON {"action": "turn_off", "device": "living_room_light"} -> Python triggers API.
+
+Routine Execution: Combine actions based on time or command (e.g., "Goodnight" turns off lights, arms cameras, and sets an alarm).
+
+3.2 Memory & Context (The "Hippocampus")
+
+Memory Injection: Every time you chat, the Python harness searches ChromaDB for relevant past facts (e.g., "User hates tomatoes", "User is working on a React project") and injects them into the system prompt.
+
+Memory Extraction: A background tool the LLM can call: save_memory(fact="User is out of milk").
+
+3.3 Autonomous Coding Agent (The "Worker")
+
+Workflow: Triggered by the user in the morning (e.g., "Build a dark mode toggle for my portfolio repo").
+
+Execution: The system swaps the lightweight chat model for a heavier coding model (e.g., Qwen Coder) since you won't need fast interactive chat while at work.
+
+Agentic Loop: Uses a framework like Smolagents or CrewAI to read local files, write code, run tests, and commit to a local git branch.
+
+Output: Creates a Pull Request or a diff file for review upon your return.
+
+3.4 Email, Text, & Life Management (The "Secretary")
+
+Email Parsing: Connect via IMAP to read incoming newsletters or receipts.
+
+Inventory & Shopping: LLM reads your meal ideas, checks a SQLite "fridge inventory" table, and appends missing items to a "Shopping List" tool.
+
+Daily Briefing: Automatically scrapes your calendar, weather, and emails, generating a summary sent to your phone or displayed on the UI when you wake up.
+
+4. Implementation Plan (Phased Approach)
+
+Phase 1: Foundation (Weeks 1-2)
+
+[ ] Install Ubuntu Server (or stripped-down Windows) on the KAMRUI PC.
+
+[ ] Install Tailscale for remote SSH/Web access.
+
+[ ] Install Ollama and pull lightweight models (qwen2.5:3b, llama3.2).
+
+[ ] Build the basic Python FastAPI harness that accepts chat inputs, sends them to Ollama, and returns the response.
+
+Phase 2: Tool Calling & The Framework (Weeks 3-4)
+
+[ ] Implement the function-calling schema in the Python harness.
+
+[ ] Build Tool #1: Kasa Lights (simple on/off/dim).
+
+[ ] Build Tool #2: Time/Date and Weather API.
+
+[ ] Build Tool #3: Note-taking / Shopping List (writing to SQLite).
+
+[ ] Connect a frontend (Open WebUI) to your custom FastAPI backend.
+
+Phase 3: Memory & Automation (Weeks 5-6)
+
+[ ] Integrate ChromaDB for semantic memory storage.
+
+[ ] Create the "Reflection" loop: At midnight, a script prompts the LLM to summarize the day's chats and save new facts to the Vector DB.
+
+[ ] Implement APScheduler for morning briefings.
+
+Phase 4: The Autonomous Coding Agent (Weeks 7+)
+
+[ ] Create a protected local directory for coding projects.
+
+[ ] Implement a multi-agent framework script.
+
+[ ] Grant the agent terminal access (with strict sandboxing/guardrails).
+
+[ ] Set up an automation trigger to swap Ollama models, run the coding agent all day, and shut down/swap back to the chat model at 5:00 PM.
+
+5. Hardware-Specific Considerations
+
+Memory Management: 16GB is shared between CPU and the Vega GPU. Ensure your OS uses no more than 2-3GB. Limit your LLM to ~6GB (4-bit quantized 7B or 8B model) to leave 6-7GB for your Python environment, Vector DB, and coding agent file processing.
+
+Model Swapping: Do not run two models at once. Have your Python harness programmatically unload the chat model and load the coding model when launching background agentic tasks.
+
+Cooling: Mini PCs can throttle under sustained load. When running the coding agent all day, monitor the CPU temps using tools like lm-sensors.
