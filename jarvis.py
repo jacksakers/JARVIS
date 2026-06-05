@@ -76,7 +76,7 @@ def compress_history(messages: list[dict], llm: "BaseLLM") -> str:
 
 def main():
     print("Initializing JARVIS Framework...")
-    speak("Initializing JARVIS Framework...")
+    stream_speak("Hello sir. How can I help?...")
     config = load_config()
     
     # Initialize and run the Tool Registry
@@ -173,7 +173,7 @@ END OF RESPONSE
 
         # Randomly select a thinking text to make it feel more natural
         random_index = random.randint(0, len(thinking_text_options) - 1)
-        speak(thinking_text_options[random_index])
+        stream_speak(thinking_text_options[random_index])
         
         print("\nJARVIS: ", end="", flush=True) # Start the line without a newline
         
@@ -243,8 +243,13 @@ END OF RESPONSE
 
                 result_messages = [
                     {"role": "system", "content": f"Tool '{tool_name}' returned: {result}\nNow respond to the user based on this result. Feel free to call more tools if needed."},
-                    {"role": "user", "content": user_input}
                 ]
+
+                # add all user and assistant messages from the current conversation to the context for the next LLM call, so it can decide to call more tools if needed
+                for msg in messages:
+                    # make sure role is in the message and is user before adding to the context
+                    if "role" in msg and msg["role"] in ["user"]:
+                        result_messages.append(msg)
                 
                 # Feed the result back to the LLM as a system message
                 messages.append({"system": "response", "content": f"Tool '{tool_name}' returned: {result}\nNow respond to the user based on this result."})
