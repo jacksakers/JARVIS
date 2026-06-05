@@ -84,15 +84,18 @@ However, if you need to perform an action or get data, you MUST use this exact p
 
 TOOL: <tool_name>
 <arg_name>: <arg_value>
+END OF RESPONSE
 
 Example:
 I need to check the time to answer this.
 TOOL: get_system_time
+END OF RESPONSE
 
 Example with arguments:
 I will turn off the lights now.
 TOOL: turn_off_lights
 room: living_room
+END OF RESPONSE
 """
 
     messages = [
@@ -100,10 +103,28 @@ room: living_room
     ]
 
     while True:
+        # Clean up the input to remove old user inputs 
+        # This prevents the LLM from getting confused by multiple user turns in the history
+        # while still keeping the tool results and assistant responses for context
+        old_messages = messages.copy()
+        messages = []
+        for msg in old_messages:
+            # make sure the role is in the message
+            if "role" not in msg:
+                continue
+            print(f"[Debug] Message in history: {msg['role']}: {msg['content'][:50]}...") # Print the role and a snippet of the content for debugging
+            if msg["role"] == "user":
+                continue
+            messages.append(msg)
+
         user_input = input("\nYou: ")
         if user_input.lower() in ['exit', 'quit']:
             print("Shutting down JARVIS...")
             break
+
+        if user_input.strip() == "":
+            print("Please enter a valid message.")
+            continue
         
         messages.append({"role": "user", "content": user_input})
         
@@ -111,6 +132,8 @@ room: living_room
         
         response_text = ""
         # Iterate through the generator and print tokens instantly
+        # Print what is being sent to the LLM for debugging in a pretty way
+        print(f"\n[Debug] Messages sent to LLM:\n{json.dumps(messages, indent=2)}\n")
         for chunk in llm.generate(messages):
             print(chunk, end="", flush=True)
             response_text += chunk
@@ -123,6 +146,10 @@ room: living_room
         # --- NEW: TOOL INTERCEPTOR ---
         tool_call = extract_tool_call(response_text)
         
+        # Append the full compiled response to history if there were no tool calls
+        if not tool_call:
+            messages.append({"role": "assistant", "content": response_text})
+
         # If we found valid XML and it has a "tool" key
         if tool_call and "tool" in tool_call:
             tool_name = tool_call["tool"]
@@ -145,14 +172,21 @@ room: living_room
                 except Exception as e:
                     result = f"Error executing tool: {e}"
                     print(f"[Tool Error: {result}]\n")
+
+                result_messages = [
+                    {"role": "system", "content": f"Tool '{tool_name}' returned: {result}\nNow respond to the user based on this result. Feel free to call more tools if needed."},
+                    {"role": "user", "content": user_input}
+                ]
                 
                 # Feed the result back to the LLM as a system message
-                messages.append({"role": "system", "content": f"Tool '{tool_name}' returned: {result}\nNow respond to the user based on this result."})
+                messages.append({"system": "response", "content": f"Tool '{tool_name}' returned: {result}\nNow respond to the user based on this result."})
                 
                 # Trigger a second LLM generation to formulate the final answer
                 print("JARVIS: ", end="", flush=True)
                 final_response = ""
-                for chunk in llm.generate(messages):
+                # Print what is being sent to the LLM for debugging in a pretty way
+                print(f"\n[Debug] Messages sent to LLM for final response:\n{json.dumps(result_messages, indent=2)}\n")
+                for chunk in llm.generate(result_messages):
                     print(chunk, end="", flush=True)
                     final_response += chunk
                 print()

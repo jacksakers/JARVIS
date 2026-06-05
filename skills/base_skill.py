@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import json
 from pydantic import BaseModel
 from typing import Type
 
@@ -23,12 +24,8 @@ class BaseSkill(ABC):
         pass
         
     @classmethod
-    def get_schema(cls) -> dict:
+    def get_schema(cls) -> str:
         """
-        Automatically generates the JSON schema that the LLM needs to understand the tool.
+        Automatically generates the text readable schema that the LLM needs to understand the tool.
         """
-        return {
-            "name": cls.name,
-            "description": cls.description,
-            "parameters": cls.input_model.schema()
-        }
+        return f"Tool Name: {cls.name}, Description: {cls.description}"
