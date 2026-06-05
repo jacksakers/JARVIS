@@ -13,6 +13,8 @@ async def _speak_async(text: str, voice: str = "en-GB-RyanNeural"):
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(audio_file)
 
+    print(f"[Debug] Generated TTS audio saved to {audio_file} for text: {text[:50]}...")
+
     # Play the generated speech using pygame
     pygame.mixer.init()
     pygame.mixer.music.load(audio_file)

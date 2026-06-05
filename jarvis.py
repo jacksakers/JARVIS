@@ -2,9 +2,12 @@ import yaml
 import sys
 import json
 import re
+import random
+
 from providers.ollama_provider import OllamaProvider
 from core.tool_registry import ToolRegistry
 from core.memory_manager import ConversationBuffer
+from core.tts_engine import speak
 
 def load_config():
     try:
@@ -73,6 +76,7 @@ def compress_history(messages: list[dict], llm: "BaseLLM") -> str:
 
 def main():
     print("Initializing JARVIS Framework...")
+    speak("Initializing JARVIS Framework...")
     config = load_config()
     
     # Initialize and run the Tool Registry
@@ -159,6 +163,16 @@ END OF RESPONSE
         buffer.append("user", user_input)
 
         print("\nJARVIS: I am processing your request...\n")
+
+        thinking_text_options = [
+            "Let me think about that...",
+            "I need to consider this carefully...",
+            "Processing your request...",
+            f"{user_input}... Interesting question, let me analyze it...",
+        ]
+
+        # Randomly select a thinking text to make it feel more natural
+        speak(random.choice(thinking_text_options))
         
         print("\nJARVIS: ", end="", flush=True) # Start the line without a newline
         
@@ -171,6 +185,13 @@ END OF RESPONSE
             response_text += chunk
             
         print() # Add a final newline when the stream finishes
+
+        spoken_text = response_text
+        if "TOOL:" in spoken_text:
+            spoken_text = spoken_text.split("TOOL:")[0].strip() # Only speak the part before the tool call
+        
+        if spoken_text:
+            speak(spoken_text)
         
         # Append the full compiled response to history
         messages.append({"role": "assistant", "content": response_text})
@@ -225,6 +246,8 @@ END OF RESPONSE
                     print(chunk, end="", flush=True)
                     final_response += chunk
                 print()
+
+                speak(final_response)
                 
                 # Save the final response to history
                 messages.append({"role": "assistant", "content": final_response})
