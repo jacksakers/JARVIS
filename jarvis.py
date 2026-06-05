@@ -21,13 +21,24 @@ def extract_tool_call(text: str) -> dict | None:
     
     for line in lines:
         line = line.strip()
-        # Look for the exact TOOL trigger phrase
+        
+        # Start capturing when we see TOOL:
         if line.startswith("TOOL:"):
             tool_name = line.replace("TOOL:", "").strip()
-        # If we already found a tool, treat following lines as arguments if they have a colon
-        elif tool_name and ":" in line:
-            parts = line.split(":", 1)
-            args[parts[0].strip()] = parts[1].strip()
+            continue
+            
+        # If we have found a tool, look for arguments
+        if tool_name:
+            if ":" in line:
+                parts = line.split(":", 1)
+                args[parts[0].strip()] = parts[1].strip()
+            elif line == "":
+                # Stop parsing if we hit a blank line after the tool call
+                # This prevents accidentally grabbing later conversational text
+                continue
+            else:
+                # If there's non-empty text without a colon, we've moved past the tool block
+                break
             
     if tool_name:
         return {"tool": tool_name, "args": args}
@@ -68,17 +79,20 @@ You have access to the following tools:
 {json.dumps(tool_schemas, indent=2)}
 
 RULES FOR TOOLS:
-If you can answer the user's question normally, just talk to them.
-If you need to perform an action or get data, you MUST use the plain text format below.
+You may think out loud and converse normally. 
+However, if you need to perform an action or get data, you MUST use this exact plain text format on new lines:
 
-Example without arguments:
+TOOL: <tool_name>
+<arg_name>: <arg_value>
+
+Example:
+I need to check the time to answer this.
 TOOL: get_system_time
 
 Example with arguments:
+I will turn off the lights now.
 TOOL: turn_off_lights
 room: living_room
-
-Do not add any conversational text before or after if you are calling a tool.
 """
 
     messages = [
