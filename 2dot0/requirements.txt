@@ -10,3 +10,5 @@ prompt_toolkit  # Command-line input with history and readline keybindings
 # Voice
 edge_tts
 pygame
+python-kasa
+python-dotenv

@@ -6,3 +6,6 @@ jarvis_memory.db
 
 *.mp3
 .jarvis_history
+
+*venv*
+.env
