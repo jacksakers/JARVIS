@@ -3,6 +3,8 @@ import threading
 from typing import Optional, List, Dict, Any
 
 from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
 
 from core.llm_provider import BaseLLM, StreamChunk, ToolCall
 from core.memory_manager import IntelligentMemoryManager
@@ -13,21 +15,6 @@ from core.tts_engine import TTSEngine
 class AgentLoop:
     """
     The core agentic loop that drives a single user turn end-to-end.
-
-    Flow per turn
-    ─────────────
-    1. Append the user message to memory.
-    2. Stream the LLM response (with tool schemas injected).
-    3. If the model emits tool_calls → execute them, add results to memory,
-       repeat from step 2 (up to MAX_TOOL_ITERATIONS).
-    4. When the model returns plain content → flush TTS, close the turn.
-    5. Optionally run the history summariser if the buffer is getting large.
-
-    Interrupt safety
-    ────────────────
-    A shared threading.Event (stop_event) is checked inside the streaming
-    loop. Setting it (via Ctrl+C in jarvis2.py) cuts the stream and silences
-    the TTS immediately.
     """
 
     MAX_TOOL_ITERATIONS = 10
@@ -47,10 +34,6 @@ class AgentLoop:
         self.tts = tts
         self.console = console
         self.stop_event = stop_event
-
-    # ------------------------------------------------------------------
-    # Public entry point
-    # ------------------------------------------------------------------
 
     def run_turn(self, user_input: str) -> Optional[str]:
         """
@@ -99,12 +82,11 @@ class AgentLoop:
             self.memory.append_tool_turn(assistant_msg, tool_results)
             self.console.print()  # blank line after tool status
 
-        # Should never reach here in normal operation
         self.memory.close_turn()
         return None
 
     # ------------------------------------------------------------------
-    # Streaming
+    # Streaming with Live Markdown Rendering
     # ------------------------------------------------------------------
 
     def _stream_response(
@@ -113,17 +95,16 @@ class AgentLoop:
         tools: Optional[list],
     ):
         """
-        Stream the LLM response.
-        Returns (content: str, tool_calls: list | None).
-        Shows a spinner until the first content token arrives.
+        Stream the LLM response with real-time markdown styling.
         """
         content = ""
-        tool_calls = None  # Or initialize as [] if your backend prefers an empty list over None
+        tool_calls = None
         started_output = False
 
         status = self.console.status("[cyan]Thinking...[/cyan]", spinner="dots")
         status.start()
 
+        live = None
         try:
             for chunk in self.llm.stream(messages, tools=tools):
                 if self.stop_event.is_set():
@@ -132,17 +113,19 @@ class AgentLoop:
                 if chunk.content and not started_output:
                     status.stop()
                     started_output = True
-                    # Print the JARVIS label; subsequent chunks go to raw stdout
                     self.console.print()
-                    self.console.print("[bold cyan]JARVIS:[/bold cyan] ", end="")
+                    self.console.print("[bold cyan]JARVIS:[/bold cyan]")
+                    
+                    # Initialize Rich Live context manager for continuous rendering
+                    live = Live(Markdown(""), console=self.console, auto_refresh=True)
+                    live.start()
 
                 if chunk.content:
-                    sys.stdout.write(chunk.content)
-                    sys.stdout.flush()
                     content += chunk.content
+                    if live:
+                        live.update(Markdown(content))
                     self.tts.feed_chunk(chunk.content)
 
-                # ── Accumulate tool calls instead of overwriting them ──
                 if chunk.tool_calls:
                     if tool_calls is None:
                         tool_calls = []
@@ -150,13 +133,16 @@ class AgentLoop:
 
         except Exception as exc:
             status.stop()
+            if live:
+                live.stop()
             self.console.print(f"\n[red]Stream error: {exc}[/red]")
             return content, None
         finally:
             status.stop()
+            if live:
+                live.stop()  # Closes and freezes the text output nicely on the console screen
             if started_output:
-                sys.stdout.write("\n")
-                sys.stdout.flush()
+                self.console.print()
 
         return content, tool_calls
 
@@ -167,7 +153,6 @@ class AgentLoop:
     def _execute_tool_calls(
         self, tool_calls: List[ToolCall]
     ) -> List[Dict[str, Any]]:
-        """Execute all tool calls and return a list of tool-result messages."""
         results = []
         for tc in tool_calls:
             if self.stop_event.is_set():
@@ -179,7 +164,7 @@ class AgentLoop:
             )
 
             result = self._run_one_tool(tc.name, tc.arguments)
-            snippet = result[:120] + ("…" if len(result) > 120 else "")
+            snippet = result[:250] + ("…" if len(result) > 250 else "")
             self.console.print(f"  [bold green]✓  Result:[/bold green] [dim]{snippet}[/dim]")
 
             results.append({"role": "tool", "content": result, "name": tc.name})
@@ -199,15 +184,10 @@ class AgentLoop:
         except Exception as exc:
             return f"Tool execution failed: {exc}"
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _build_assistant_tool_msg(
         content: str, tool_calls: List[ToolCall]
     ) -> Dict[str, Any]:
-        """Build the assistant message dict that echoes tool calls back to the API."""
         return {
             "role": "assistant",
             "content": content,

@@ -12,16 +12,7 @@ import pygame
 
 class TTSEngine:
     """
-    Edge-TTS voice engine backed by a dedicated worker thread.
-
-    Features
-    ────────
-    • Sentence-level streaming: feed raw LLM chunks via feed_chunk(); the
-      engine splits on sentence boundaries and queues each sentence for
-      playback without waiting for the full response.
-    • Interruptible: stop_all() clears the queue and halts pygame mid-word,
-      enabling Ctrl+C to cut the voice off instantly.
-    • Toggle: set enabled = False at runtime to mute without restarting.
+    Edge-TTS voice engine backed by a dedicated worker thread with markdown filtering.
     """
 
     # Sentence-boundary pattern: period / ! / ? followed by whitespace or end
@@ -39,17 +30,52 @@ class TTSEngine:
         self._worker.start()
 
     # ------------------------------------------------------------------
+    # Markdown Text Stripper for Clean Speech
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _clean_markdown_for_tts(text: str) -> str:
+        """Strip markdown layout syntax and drop code blocks entirely for clean speech output."""
+        # 1. Strip entire code fences blocks multi-line
+        text = re.sub(r'```[\s\S]*?```', '', text)
+        
+        # 2. Inline code backticks removal
+        text = re.sub(r'`([^`]+)`', r'\1', text)
+        
+        # 3. Drop Markdown image entities entirely
+        text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
+        
+        # 4. Convert hyperlinks [Display Text](http://...) -> Display Text
+        text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+        
+        # 5. Drop header pound prefixes
+        text = re.sub(r'#+\s+', '', text)
+        
+        # 6. Remove bolding and italics formatting decorators
+        text = re.sub(r'(\*\*|__)(.*?)\1', r'\2', text)
+        text = re.sub(r'(\*|_)(.*?)\1', r'\2', text)
+        
+        # 7. Strip list bullets or indentation lines at structural boundaries
+        text = re.sub(r'^\s*[-*+]\s+', '', text)
+        text = re.sub(r'^\s*\d+\.\s+', '', text)
+        text = re.sub(r'^\s*>\s+', '', text)
+        
+        return text.strip()
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def speak(self, text: str) -> None:
         """Queue a complete sentence/phrase for immediate playback."""
         if self.enabled and text.strip():
-            self._queue.put(text.strip())
+            clean_text = self._clean_markdown_for_tts(text)
+            if clean_text:
+                self._queue.put(clean_text)
 
     def feed_chunk(self, chunk: str) -> None:
         """
-        Append a raw streaming chunk. Sentences are detected automatically
+        Append a raw streaming chunk. Sentences are detected automatically, Cleaned,
         and dispatched to the playback queue as they complete.
         """
         if not self.enabled:
@@ -60,27 +86,23 @@ class TTSEngine:
         parts = self._SENTENCE_END.split(self._sentence_buffer)
         if len(parts) > 1:
             for sentence in parts[:-1]:
-                sentence = sentence.strip()
-                if sentence:
-                    self._queue.put(sentence)
+                clean_sentence = self._clean_markdown_for_tts(sentence)
+                if clean_sentence:
+                    self._queue.put(clean_sentence)
             self._sentence_buffer = parts[-1]
 
     def flush_buffer(self) -> None:
         """Send any remaining text in the sentence buffer to the queue."""
-        remainder = self._sentence_buffer.strip()
+        remainder = self._clean_markdown_for_tts(self._sentence_buffer)
         if remainder:
             self._queue.put(remainder)
         self._sentence_buffer = ""
 
     def stop_all(self) -> None:
-        """
-        Immediately halt the current playback and discard everything queued.
-        Resets cleanly so the engine is ready for the next response.
-        """
+        """Immediately halt current playback and discard everything queued."""
         self._stop_flag.set()
         self._sentence_buffer = ""
 
-        # Drain the queue without blocking
         while not self._queue.empty():
             try:
                 self._queue.get_nowait()
@@ -88,7 +110,6 @@ class TTSEngine:
             except queue.Empty:
                 break
 
-        # Cut pygame playback
         try:
             if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
                 pygame.mixer.music.stop()
@@ -100,7 +121,7 @@ class TTSEngine:
     def shutdown(self) -> None:
         """Gracefully stop the worker thread (call on exit)."""
         self.stop_all()
-        self._queue.put(None)  # sentinel
+        self._queue.put(None)
         self._worker.join(timeout=3)
 
     # ------------------------------------------------------------------
@@ -111,7 +132,7 @@ class TTSEngine:
         while True:
             text: Optional[str] = self._queue.get()
 
-            if text is None:        # shutdown sentinel
+            if text is None:
                 break
 
             if self._stop_flag.is_set() or not text.strip():
@@ -121,7 +142,7 @@ class TTSEngine:
             try:
                 self._synthesize_and_play(text)
             except Exception:
-                pass  # Never crash the worker
+                pass
 
             self._queue.task_done()
 

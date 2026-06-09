@@ -73,7 +73,7 @@ class OllamaProvider(BaseLLM):
                 # print(f"\n[DEBUG] Received chunk from Ollama: {chunk}\n")
                 tool_calls: Optional[List[ToolCall]] = None
                 if chunk.message.tool_calls:
-                    print(f"\n[DEBUG] Detected tool calls in chunk: {chunk.message.tool_calls}\n")
+                    # print(f"\n[DEBUG] Detected tool calls in chunk: {chunk.message.tool_calls}\n")
                     tool_calls = [
                         ToolCall(
                             name=tc.function.name,
