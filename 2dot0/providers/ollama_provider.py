@@ -31,7 +31,7 @@ class OllamaProvider(BaseLLM):
         Used internally for summarisation and one-shot tasks.
         """
         # Print what we are sending to Ollama for debugging (can be removed later)
-        print(f"\n[DEBUG] Sending to Ollama: {messages}\n")
+        # print(f"\n[DEBUG] Sending to Ollama: {messages}\n")
         try:
             for chunk in self._client.chat(
                 model=self.model,
@@ -65,7 +65,7 @@ class OllamaProvider(BaseLLM):
             kwargs["tools"] = tools
 
         # print what we are sending to Ollama for debugging (can be removed later)
-        print(f"\n[DEBUG] Sending to Ollama: {kwargs}\n")
+        # print(f"\n[DEBUG] Sending to Ollama: {kwargs}\n")
 
         try:
             for chunk in self._client.chat(**kwargs):

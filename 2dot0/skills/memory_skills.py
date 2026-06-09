@@ -113,7 +113,7 @@ class SearchMemorySkill(BaseSkill):
         try:
             cursor = db.execute(
                 """
-                SELECT entity, attribute, value, timestamp
+                SELECT entity, attribute, value
                 FROM   memory_fts
                 WHERE  memory_fts MATCH ?
                 ORDER  BY rank

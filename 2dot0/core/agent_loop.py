@@ -30,7 +30,7 @@ class AgentLoop:
     the TTS immediately.
     """
 
-    MAX_TOOL_ITERATIONS = 5
+    MAX_TOOL_ITERATIONS = 10
 
     def __init__(
         self,
@@ -118,7 +118,7 @@ class AgentLoop:
         Shows a spinner until the first content token arrives.
         """
         content = ""
-        tool_calls = None
+        tool_calls = None  # Or initialize as [] if your backend prefers an empty list over None
         started_output = False
 
         status = self.console.status("[cyan]Thinking...[/cyan]", spinner="dots")
@@ -142,8 +142,11 @@ class AgentLoop:
                     content += chunk.content
                     self.tts.feed_chunk(chunk.content)
 
+                # ── Accumulate tool calls instead of overwriting them ──
                 if chunk.tool_calls:
-                    tool_calls = chunk.tool_calls
+                    if tool_calls is None:
+                        tool_calls = []
+                    tool_calls.extend(chunk.tool_calls)
 
         except Exception as exc:
             status.stop()

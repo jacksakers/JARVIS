@@ -41,6 +41,7 @@ v1 queued full responses before speaking. v2 detects sentence boundaries in real
 | `calculate` | Safely evaluates maths expressions using AST (no `eval`) |
 | `save_memory` | Persists facts to a local SQLite database |
 | `search_memory` | Full-text search across saved memories (SQLite FTS5) |
+| `control_tapo_kasa_devices` | Control Tapo devices like smart lights |
 
 ### Proper Provider Abstraction
 The `BaseLLM` abstract class now exposes two methods: `generate()` (simple streaming, used for summarisation) and `stream()` (full streaming with tool support). Adding a new provider (e.g. OpenAI) is a matter of implementing those two methods — the agent loop needs zero changes.
