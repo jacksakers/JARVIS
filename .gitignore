@@ -9,3 +9,9 @@ jarvis_memory.db
 
 *venv*
 .env
+
+node_modules/
+dist/
+build/
+
+*.db

@@ -1,0 +1,80 @@
+/**
+ * JARVIS API client.
+ * All functions accept an optional `mock` flag (from the Zustand store).
+ * When mock=true they delegate to the mock layer instead of fetching.
+ */
+import { API_BASE } from './config'
+import * as Mock from './mock'
+
+// ── Low-level fetch wrapper ────────────────────────────────────────────────
+
+async function request(method, path, body, isMock, mockFn) {
+  if (isMock) return mockFn()
+  const url = `${API_BASE}${path}`
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    ...(body != null ? { body: JSON.stringify(body) } : {}),
+  }
+  const res = await fetch(url, opts)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail ?? `HTTP ${res.status}`)
+  }
+  if (res.status === 204) return null
+  return res.json()
+}
+
+const get    = (path, mock, fn) => request('GET',    path, null, mock, fn)
+const post   = (path, body, mock, fn) => request('POST',   path, body, mock, fn)
+const patch  = (path, body, mock, fn) => request('PATCH',  path, body, mock, fn)
+const del    = (path, mock, fn)       => request('DELETE', path, null, mock, fn)
+
+// ── Feed ──────────────────────────────────────────────────────────────────
+
+export const getFeed = (params = {}, mock) => {
+  const qs = new URLSearchParams(params).toString()
+  return get(`/api/v1/feed/?${qs}`, mock, Mock.getFeed)
+}
+export const markRead    = (id, mock) => post(`/api/v1/feed/${id}/read`,  null, mock, () => Mock.markRead(id))
+export const markAllRead = (mock)     => post('/api/v1/feed/read-all',    null, mock, Mock.markAllRead)
+
+// ── Tasks ─────────────────────────────────────────────────────────────────
+
+export const getTasks    = (params = {}, mock) => {
+  const qs = new URLSearchParams(params).toString()
+  return get(`/api/v1/tasks/?${qs}`, mock, Mock.getTasks)
+}
+export const submitTask  = (payload, mock)     => post('/api/v1/tasks/',          payload, mock, () => Mock.submitTask(payload))
+export const cancelTask  = (id, mock)          => del(`/api/v1/tasks/${id}`,      mock, () => Mock.cancelTask(id))
+export const retryTask   = (id, mock)          => post(`/api/v1/tasks/${id}/retry`, null, mock, () => Mock.retryTask(id))
+
+// ── Routines ──────────────────────────────────────────────────────────────
+
+export const getRoutines    = (mock)           => get('/api/v1/routines/',               mock, Mock.getRoutines)
+export const getRoutine     = (id, mock)       => get(`/api/v1/routines/${id}`,          mock, () => Mock.getRoutine(id))
+export const createRoutine  = (payload, mock)  => post('/api/v1/routines/',       payload, mock, () => Mock.createRoutine(payload))
+export const updateRoutine  = (id, data, mock) => patch(`/api/v1/routines/${id}`, data,    mock, () => Mock.updateRoutine(id, data))
+export const deleteRoutine  = (id, mock)       => del(`/api/v1/routines/${id}`,          mock, () => Mock.deleteRoutine(id))
+export const runRoutine     = (id, mock)       => post(`/api/v1/routines/${id}/run`, null, mock, () => Mock.runRoutine(id))
+
+// ── Journal ───────────────────────────────────────────────────────────────
+
+export const getJournal     = (params = {}, mock) => {
+  const qs = new URLSearchParams(params).toString()
+  return get(`/api/v1/journal/?${qs}`, mock, Mock.getJournal)
+}
+export const createJournal  = (payload, mock) => post('/api/v1/journal/', payload, mock, () => Mock.createJournal(payload))
+export const deleteJournal  = (id, mock)      => del(`/api/v1/journal/${id}`, mock, () => Mock.deleteJournal(id))
+
+// ── Skills ────────────────────────────────────────────────────────────────
+
+export const getSkills = (mock) => get('/api/v1/skills/', mock, Mock.getSkills)
+
+// ── Users ─────────────────────────────────────────────────────────────────
+
+export const getMe = (mock) => get('/api/v1/users/me', mock, Mock.getMe)
+
+// ── Health ────────────────────────────────────────────────────────────────
+
+export const getHealth = () => get('/health', false, () => ({ status: 'ok' }))
