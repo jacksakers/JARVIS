@@ -142,13 +142,14 @@ class AgentLoop:
 
                 if chunk.content:
                     content += chunk.content
-                    self.on_event("content_chunk", {"chunk": chunk.content})
+                    # self.on_event("content_chunk", {"chunk": chunk.content})
 
                 # Accumulate tool calls — a single chunk may carry multiple
                 if chunk.tool_calls:
                     if tool_calls is None:
                         tool_calls = []
                     tool_calls.extend(chunk.tool_calls)
+                    self.on_event("tool_call", {"name": chunk.tool_calls[-1].name, "arguments": chunk.tool_calls[-1].arguments})
 
         except Exception as exc:
             self.on_event("error", {"message": str(exc)})

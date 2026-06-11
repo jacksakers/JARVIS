@@ -116,7 +116,7 @@ export function MobileNav() {
   const mobile = NAV.slice(0, 5) // Show first 5 on mobile
 
   return (
-    <nav className="flex items-center justify-around px-2 py-2 glass border-t border-jarvis-border safe-area-bottom">
+    <nav className="flex items-center justify-around px-2 py-2 glass border-t border-jarvis-border safe-area-bottom md:hidden">
       {mobile.map(({ to, icon: Icon, label, badge }) => (
         <NavLink
           key={to}
