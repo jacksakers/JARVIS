@@ -53,6 +53,10 @@ class User(SQLModel, table=True):
     is_primary: bool = Field(default=False)
     # JSON-encoded dict of user preferences (timezone, language, etc.)
     preferences: str = Field(default="{}")
+    # Bcrypt hash of the user's password (None = no password set)
+    password_hash: Optional[str] = Field(default=None)
+    # Short bio / description used to personalise AI responses
+    bio: str = Field(default="")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
@@ -60,6 +64,7 @@ class User(SQLModel, table=True):
     feed_items: List["FeedItem"] = Relationship(back_populates="user")
     routines: List["Routine"] = Relationship(back_populates="user")
     journal_entries: List["JournalEntry"] = Relationship(back_populates="user")
+    conversations: List["Conversation"] = Relationship(back_populates="user")
 
     def get_preferences(self) -> dict:
         try:
@@ -153,6 +158,10 @@ class Task(SQLModel, table=True):
     error_message: Optional[str] = Field(default=None)
     # Set when the task is paused waiting for a user reply (ask_user skill)
     question_feed_item_id: Optional[int] = Field(default=None)
+    # JSON-serialised IntelligentMemoryManager state saved at pause
+    conversation_state: Optional[str] = Field(default=None)
+    # Chat conversation this task belongs to (optional)
+    conversation_id: Optional[int] = Field(default=None, foreign_key="conversations.id")
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Field(default=None)
@@ -195,6 +204,53 @@ class FeedItem(SQLModel, table=True):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Chat Conversations
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Conversation(SQLModel, table=True):
+    __tablename__ = "conversations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    title: str = Field(default="New Conversation")
+    # Persona/system prompt override for this conversation
+    system_prompt_override: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user: Optional["User"] = Relationship(back_populates="conversations")
+    messages: List["ConversationMessage"] = Relationship(back_populates="conversation")
+
+
+class ConversationMessage(SQLModel, table=True):
+    __tablename__ = "conversation_messages"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    conversation_id: int = Field(foreign_key="conversations.id", index=True)
+
+    role: str = Field(default="user")  # "user" | "assistant" | "system"
+    content: str = Field(default="")
+    # Pre-rendered HTML (for assistant messages)
+    content_html: str = Field(default="")
+    # JSON-encoded list of tool events: [{type, data}]
+    tool_events: str = Field(default="[]")
+    # Task ID this message is associated with (for status polling)
+    task_id: Optional[int] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    conversation: Optional["Conversation"] = Relationship(back_populates="messages")
+
+    def get_tool_events(self) -> list:
+        try:
+            return json.loads(self.tool_events)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Journal Entries (Quick Capture)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -228,7 +284,17 @@ class UserRead(SQLModel):
     id: int
     name: str
     is_primary: bool
+    bio: str
+    preferences: str
+    has_password: bool = False  # computed — don't expose hash
     created_at: datetime
+
+
+class UserUpdate(SQLModel):
+    name: Optional[str] = None
+    bio: Optional[str] = None
+    preferences: Optional[str] = None
+    password: Optional[str] = None  # plain text, hashed server-side
 
 
 class RoutineCreate(SQLModel):
@@ -275,6 +341,7 @@ class TaskRead(SQLModel):
     id: int
     user_id: int
     routine_id: Optional[int]
+    conversation_id: Optional[int]
     prompt: str
     status: TaskStatus
     error_message: Optional[str]
@@ -331,3 +398,55 @@ class SkillRead(SQLModel):
     module_name: str
     tool_schema: str
     updated_at: datetime
+
+
+# ── Conversation schemas ──────────────────────────────────────────────────────
+
+class ConversationCreate(SQLModel):
+    title: str = "New Conversation"
+    system_prompt_override: Optional[str] = None
+
+
+class ConversationUpdate(SQLModel):
+    title: Optional[str] = None
+    system_prompt_override: Optional[str] = None
+
+
+class ConversationMessageRead(SQLModel):
+    id: int
+    conversation_id: int
+    role: str
+    content: str
+    content_html: str
+    tool_events: str
+    task_id: Optional[int]
+    created_at: datetime
+
+
+class ConversationRead(SQLModel):
+    id: int
+    user_id: int
+    title: str
+    system_prompt_override: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+
+
+class TaskCreate(SQLModel):
+    prompt: str
+    routine_id: Optional[int] = None
+    system_prompt_override: Optional[str] = None
+    conversation_id: Optional[int] = None
+
+
+# ── Auth schemas ──────────────────────────────────────────────────────────────
+
+class LoginRequest(SQLModel):
+    username: str
+    password: str
+
+
+class LoginResponse(SQLModel):
+    token: str
+    user: UserRead

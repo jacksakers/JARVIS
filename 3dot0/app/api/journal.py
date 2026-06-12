@@ -22,12 +22,22 @@ def _get_default_user(session: Session) -> User:
 def list_entries(
     unprocessed_only: bool = Query(default=False),
     limit: int = Query(default=50, le=200),
+    search: str = Query(default=None, description="Filter by keyword in title or content"),
     session: Session = Depends(get_session),
 ):
     user = _get_default_user(session)
     query = select(JournalEntry).where(JournalEntry.user_id == user.id)
     if unprocessed_only:
         query = query.where(JournalEntry.processed == False)
+    if search:
+        term = f"%{search}%"
+        from sqlmodel import or_
+        query = query.where(
+            or_(
+                JournalEntry.content.ilike(term),
+                JournalEntry.title.ilike(term),
+            )
+        )
     query = query.order_by(JournalEntry.created_at.desc()).limit(limit)
     return session.exec(query).all()
 

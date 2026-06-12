@@ -1,15 +1,40 @@
 /**
  * Zustand global store.
  * Handles: mock mode toggle, WS event log, live task/feed patches,
- * connection status, and unread count.
+ * connection status, unread count, and auth state.
  */
 import { create } from 'zustand'
 import { MOCK_DEFAULT } from './config'
+
+// Load persisted auth from localStorage
+const _storedToken = localStorage.getItem('jarvis_token') || null
+const _storedUser  = (() => {
+  try { return JSON.parse(localStorage.getItem('jarvis_user') || 'null') }
+  catch { return null }
+})()
 
 const useStore = create((set, get) => ({
   // ── Mock mode ────────────────────────────────────────────────────────────
   mockMode: MOCK_DEFAULT,
   toggleMock: () => set(s => ({ mockMode: !s.mockMode })),
+
+  // ── Auth ────────────────────────────────────────────────────────────────
+  authToken: _storedToken,
+  currentUser: _storedUser,
+  setAuth: (user, token) => {
+    localStorage.setItem('jarvis_token', token)
+    localStorage.setItem('jarvis_user', JSON.stringify(user))
+    set({ authToken: token, currentUser: user })
+  },
+  clearAuth: () => {
+    localStorage.removeItem('jarvis_token')
+    localStorage.removeItem('jarvis_user')
+    set({ authToken: null, currentUser: null })
+  },
+  updateCurrentUser: (user) => {
+    localStorage.setItem('jarvis_user', JSON.stringify(user))
+    set({ currentUser: user })
+  },
 
   // ── Connection status ─────────────────────────────────────────────────
   wsStatus: 'disconnected', // 'connected' | 'disconnected' | 'mock' | 'error'
@@ -48,6 +73,10 @@ const useStore = create((set, get) => ({
   // ── Active running task ID (for progress tracking in chat) ────────
   activeTaskId: null,
   setActiveTaskId: (id) => set({ activeTaskId: id }),
+
+  // ── Active conversation ───────────────────────────────────────────
+  activeConversationId: null,
+  setActiveConversationId: (id) => set({ activeConversationId: id }),
 }))
 
 export default useStore

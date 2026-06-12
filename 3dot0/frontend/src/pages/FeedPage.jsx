@@ -153,15 +153,22 @@ export default function FeedPage() {
   const decUnread   = useStore(s => s.decrementUnread)
   const setNewFeed  = useStore(s => s.setNewFeedItem)
 
-  const [items, setItems]     = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter]   = useState('all')
+  const PAGE_SIZE = 20
+
+  const [items, setItems]       = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [filter, setFilter]     = useState('all')
+  const [offset, setOffset]     = useState(0)
+  const [hasMore, setHasMore]   = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setOffset(0)
     try {
-      const data = await API.getFeed({}, mockMode)
+      const data = await API.getFeed({ limit: PAGE_SIZE, offset: 0 }, mockMode)
       setItems(data)
+      setHasMore(data.length === PAGE_SIZE)
       setUnread(data.filter(i => !i.is_read).length)
     } catch (e) {
       console.error(e)
@@ -171,6 +178,21 @@ export default function FeedPage() {
   }, [mockMode])
 
   useEffect(() => { load() }, [load])
+
+  const loadMore = async () => {
+    setLoadingMore(true)
+    try {
+      const newOffset = offset + PAGE_SIZE
+      const data = await API.getFeed({ limit: PAGE_SIZE, offset: newOffset }, mockMode)
+      setItems(prev => [...prev, ...data])
+      setOffset(newOffset)
+      setHasMore(data.length === PAGE_SIZE)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   // Inject live items pushed from mock WS
   useEffect(() => {
@@ -264,6 +286,19 @@ export default function FeedPage() {
               <FeedItem key={item.id} item={item} onMarkRead={markRead} onReply={handleReply} onDelete={deleteItem} />
             ))}
           </AnimatePresence>
+          {hasMore && (
+            <div className="flex justify-center pt-2">
+              <Button variant="ghost" size="sm" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? <Spinner size={12} /> : null} Load More
+              </Button>
+            </div>
+          )}
+          {items.length > 0 && (
+            <p className="text-center text-xs text-jarvis-muted/50 pt-1">
+              Showing {filtered.length} of {items.length} loaded
+              {hasMore ? ' — scroll down for more' : ''}
+            </p>
+          )}
         </div>
       )}
     </div>

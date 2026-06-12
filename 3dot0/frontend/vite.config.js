@@ -9,26 +9,51 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Use 'generateSW' strategy — Vite builds a proper service worker
+      strategies: 'generateSW',
+      // Expose the SW registration in DevTools
+      devOptions: { enabled: true, type: 'module' },
+      includeAssets: ['icon-192.png', 'icon-512.png', 'manifest.json'],
       manifest: {
         name: 'JARVIS Command Center',
         short_name: 'JARVIS',
-        description: 'JARVIS v3.0 — Asynchronous AI Assistant',
+        description: 'JARVIS v3.0 — Your personal asynchronous AI secretary',
         theme_color: '#020917',
         background_color: '#020917',
         display: 'standalone',
         orientation: 'any',
+        start_url: '/',
+        scope: '/',
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          {
+            src: '/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Don't cache the WS endpoint
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api/, /^\/ws/, /^\/docs/, /^\/redoc/],
         runtimeCaching: [
           {
-            urlPattern: /^https?:\/\/.*\/api\/v1\/.*/i,
+            // API reads: network-first, 60s cache
+            urlPattern: /^https?:\/\/.*\/api\/v1\/(feed|tasks|journal|routines|skills|users).*/i,
             handler: 'NetworkFirst',
-            options: { cacheName: 'api-cache', expiration: { maxAgeSeconds: 60 } },
+            options: {
+              cacheName: 'api-cache',
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 },
+              networkTimeoutSeconds: 10,
+            },
           },
         ],
       },

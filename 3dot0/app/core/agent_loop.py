@@ -30,8 +30,9 @@ SENTINEL_WAITING = "__WAITING_FOR_USER__:"
 
 class UserInputRequired(Exception):
     """Raised when the ask_user skill pauses execution pending a user reply."""
-    def __init__(self, feed_item_id: int) -> None:
+    def __init__(self, feed_item_id: int, memory=None) -> None:
         self.feed_item_id = feed_item_id
+        self.memory = memory  # IntelligentMemoryManager instance to serialize
         super().__init__(f"Waiting for user reply on feed item {feed_item_id}")
 
 
@@ -194,7 +195,7 @@ class AgentLoop:
             # Detect ask_user sentinel — pause the agent loop
             if result.startswith(SENTINEL_WAITING):
                 feed_item_id = int(result[len(SENTINEL_WAITING):])
-                raise UserInputRequired(feed_item_id)
+                raise UserInputRequired(feed_item_id, memory=self.memory)
 
             self.on_event("tool_result", {"name": tc.name, "result": result[:300]})
 

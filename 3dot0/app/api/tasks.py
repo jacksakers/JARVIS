@@ -56,6 +56,7 @@ def submit_task(
         prompt=payload.prompt,
         routine_id=payload.routine_id,
         system_prompt_override=payload.system_prompt_override,
+        conversation_id=payload.conversation_id,
         status=TaskStatus.queued,
     )
     session.add(task)

@@ -7,11 +7,24 @@ import TasksPage    from './pages/TasksPage'
 import JournalPage  from './pages/JournalPage'
 import DebugPage    from './pages/DebugPage'
 import SettingsPage from './pages/SettingsPage'
+import LoginPage    from './pages/LoginPage'
+import useStore     from './store'
+
+function RequireAuth({ children }) {
+  const authToken = useStore(s => s.authToken)
+  if (!authToken) return <Navigate to="/login" replace />
+  return children
+}
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<AppShell />}>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={
+        <RequireAuth>
+          <AppShell />
+        </RequireAuth>
+      }>
         <Route index         element={<FeedPage />} />
         <Route path="chat"     element={<ChatPage />} />
         <Route path="routines" element={<RoutinesPage />} />
@@ -24,3 +37,4 @@ export default function App() {
     </Routes>
   )
 }
+

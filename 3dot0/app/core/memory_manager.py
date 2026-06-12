@@ -79,6 +79,30 @@ class IntelligentMemoryManager:
         self._current_turn = []
         self.session_summary = ""
 
+    # ── Serialization (for task pause/resume) ─────────────────────────────────
+
+    def to_dict(self) -> dict:
+        """Serialize state for storage in the Task.conversation_state field."""
+        return {
+            "system_prompt": self.system_prompt,
+            "session_summary": self.session_summary,
+            "turns": self._turns,
+            "current_turn": self._current_turn,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict, max_recent_turns: int = 8, max_tokens: int = 8000) -> "IntelligentMemoryManager":
+        """Restore from a serialized dict."""
+        obj = cls(
+            system_prompt=data.get("system_prompt", ""),
+            max_recent_turns=max_recent_turns,
+            max_tokens=max_tokens,
+        )
+        obj.session_summary = data.get("session_summary", "")
+        obj._turns = data.get("turns", [])
+        obj._current_turn = data.get("current_turn", [])
+        return obj
+
     # ── Context window construction ────────────────────────────────────────
 
     def get_messages(self) -> List[Dict[str, Any]]:

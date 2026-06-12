@@ -17,6 +17,7 @@ Processing flow for each task:
 8. Notify WebSocket clients.
 9. If any exception occurs, mark the task "failed" and write the error.
 """
+import json
 import logging
 import threading
 import time
@@ -29,7 +30,7 @@ from app.core.markdown_utils import extract_title, render_markdown
 from app.core.memory_manager import IntelligentMemoryManager
 from app.core.tool_registry import ToolRegistry
 from app.database import session_scope
-from app.models import FeedItem, FeedItemType, Routine, Task, TaskStatus
+from app.models import Conversation, ConversationMessage, FeedItem, FeedItemType, Routine, Task, TaskStatus
 from app.providers.ollama_provider import OllamaProvider
 from app.worker.connection_manager import manager
 
@@ -139,6 +140,8 @@ class BackgroundWorker:
             task_routine_id = task.routine_id
             task_user_id = task.user_id
             task_system_override = task.system_prompt_override
+            task_conversation_id = task.conversation_id
+            task_conv_state = task.conversation_state
 
         manager.broadcast_from_thread(
             "task_started",
@@ -147,20 +150,22 @@ class BackgroundWorker:
         logger.info("Processing task %d: %s…", task_id, task_prompt[:60])
 
         try:
-            result_md = self._run_agent(
+            result_md, memory = self._run_agent(
                 task_id=task_id,
                 prompt=task_prompt,
                 routine_id=task_routine_id,
                 system_prompt_override=task_system_override,
+                saved_state=task_conv_state,
             )
             self._save_result(
                 task_id=task_id,
                 user_id=task_user_id,
                 routine_id=task_routine_id,
+                conversation_id=task_conversation_id,
                 content_markdown=result_md or "",
             )
         except UserInputRequired as exc:
-            self._mark_waiting(task_id, exc.feed_item_id)
+            self._mark_waiting(task_id, exc.feed_item_id, exc.memory)
         except Exception as exc:
             logger.exception("Task %d failed: %s", task_id, exc)
             self._mark_failed(task_id, str(exc))
@@ -171,8 +176,9 @@ class BackgroundWorker:
         prompt: str,
         routine_id: Optional[int],
         system_prompt_override: Optional[str],
-    ) -> Optional[str]:
-        """Set up and run the AgentLoop for this task."""
+        saved_state: Optional[str] = None,
+    ):
+        """Set up and run the AgentLoop for this task. Returns (result_md, memory)."""
         system_prompt = system_prompt_override or _DEFAULT_SYSTEM_PROMPT
         allowed_skills: Optional[List[str]] = None  # None = all skills
 
@@ -185,11 +191,29 @@ class BackgroundWorker:
                     # Use the routine's explicit skill list (may be empty = no skills)
                     allowed_skills = routine.get_allowed_skills()
 
-        memory = IntelligentMemoryManager(
-            system_prompt=system_prompt,
-            max_recent_turns=self._max_recent_turns,
-            max_tokens=self._max_tokens,
-        )
+        # Restore conversation state if this task was paused
+        if saved_state:
+            try:
+                state_dict = json.loads(saved_state)
+                memory = IntelligentMemoryManager.from_dict(
+                    state_dict,
+                    max_recent_turns=self._max_recent_turns,
+                    max_tokens=self._max_tokens,
+                )
+                logger.info("Task %d: restored conversation state (%d turns).", task_id, len(memory._turns))
+            except Exception as exc:
+                logger.warning("Task %d: could not restore state: %s — starting fresh.", task_id, exc)
+                memory = IntelligentMemoryManager(
+                    system_prompt=system_prompt,
+                    max_recent_turns=self._max_recent_turns,
+                    max_tokens=self._max_tokens,
+                )
+        else:
+            memory = IntelligentMemoryManager(
+                system_prompt=system_prompt,
+                max_recent_turns=self._max_recent_turns,
+                max_tokens=self._max_tokens,
+            )
 
         def on_event(event_type: str, data: Dict[str, Any]) -> None:
             manager.broadcast_from_thread(event_type, {"task_id": task_id, **data})
@@ -197,6 +221,7 @@ class BackgroundWorker:
         # Set thread-local task_id so skills like ask_user can reference it
         import app.skills.ask_user_skill as _ask_mod
         _ask_mod._current_task.task_id = task_id
+        _ask_mod._current_task.memory = memory
 
         agent = AgentLoop(
             llm=self._llm,
@@ -206,7 +231,8 @@ class BackgroundWorker:
         )
         agent.MAX_TOOL_ITERATIONS = self._max_tool_iterations
 
-        return agent.run_turn(prompt, allowed_skill_names=allowed_skills)
+        result = agent.run_turn(prompt, allowed_skill_names=allowed_skills)
+        return result, memory
 
     def _save_result(
         self,
@@ -214,8 +240,9 @@ class BackgroundWorker:
         user_id: int,
         routine_id: Optional[int],
         content_markdown: str,
+        conversation_id: Optional[int] = None,
     ) -> None:
-        """Render markdown, create a FeedItem, and mark the task done."""
+        """Render markdown, create a FeedItem, update conversation if needed, and mark the task done."""
         content_html = render_markdown(content_markdown)
         title = extract_title(content_markdown, fallback="Report")
         feed_type = self._infer_feed_type(routine_id)
@@ -238,6 +265,25 @@ class BackgroundWorker:
                 task.status = TaskStatus.done
                 task.completed_at = datetime.now(timezone.utc)
                 session.add(task)
+
+            # Update the pending assistant ConversationMessage if this is a chat task
+            if conversation_id:
+                from sqlmodel import select
+                pending = session.exec(
+                    select(ConversationMessage)
+                    .where(ConversationMessage.conversation_id == conversation_id)
+                    .where(ConversationMessage.task_id == task_id)
+                    .where(ConversationMessage.role == "assistant")
+                ).first()
+                if pending:
+                    pending.content = content_markdown
+                    pending.content_html = content_html
+                    session.add(pending)
+                # Touch conversation updated_at
+                conv = session.get(Conversation, conversation_id)
+                if conv:
+                    conv.updated_at = datetime.now(timezone.utc)
+                    session.add(conv)
 
         manager.broadcast_from_thread(
             "task_done",
@@ -267,12 +313,20 @@ class BackgroundWorker:
             {"task_id": task_id, "error": error[:200]},
         )
 
-    def _mark_waiting(self, task_id: int, feed_item_id: int) -> None:
+    def _mark_waiting(self, task_id: int, feed_item_id: int, memory=None) -> None:
+        state_json = None
+        if memory:
+            try:
+                state_json = json.dumps(memory.to_dict())
+            except Exception as exc:
+                logger.warning("Could not serialize memory state for task %d: %s", task_id, exc)
+
         with session_scope() as session:
             task = session.get(Task, task_id)
             if task:
                 task.status = TaskStatus.waiting
                 task.question_feed_item_id = feed_item_id
+                task.conversation_state = state_json
                 session.add(task)
 
         manager.broadcast_from_thread(

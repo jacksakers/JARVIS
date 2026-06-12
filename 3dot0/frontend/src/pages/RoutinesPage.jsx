@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap, Plus, Play, Pause, Trash2, Edit3, RefreshCw,
-  Upload, Download, FileJson, Copy, Check, ChevronDown, ChevronRight
+  Upload, Download, FileJson, Copy, Check, ChevronDown, ChevronRight, Cpu, Sparkles
 } from 'lucide-react'
 import { GlassPanel, Button, Badge, StatusDot, Modal, Textarea, Input, Toggle, EmptyState, Spinner, SectionHeader, IconButton } from '../components/ui'
 import CronBuilder, { humanReadable } from '../components/CronBuilder'
@@ -382,11 +382,15 @@ function ImportExportModal({ open, onClose, onImport, skills }) {
 
 export default function RoutinesPage() {
   const mockMode = useStore(s => s.mockMode)
-  const [routines, setRoutines] = useState([])
-  const [skills,   setSkills]   = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [editing,  setEditing]  = useState(null)       // null = closed, false = new, obj = existing
-  const [showImport, setShowImport] = useState(false)
+  const [routines,    setRoutines]    = useState([])
+  const [skills,      setSkills]      = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [editing,     setEditing]     = useState(null)       // null = closed, false = new, obj = existing
+  const [showImport,  setShowImport]  = useState(false)
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [genPrompt,   setGenPrompt]   = useState('')
+  const [generating,  setGenerating]  = useState(false)
+  const [genError,    setGenError]    = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -422,6 +426,32 @@ export default function RoutinesPage() {
     await API.runRoutine(id, mockMode)
   }
 
+  const generateRoutine = async () => {
+    if (!genPrompt.trim() || generating) return
+    setGenerating(true)
+    setGenError('')
+    try {
+      const result = await API.generateRoutine(genPrompt.trim(), mockMode)
+      setShowGenerate(false)
+      setGenPrompt('')
+      // Pre-populate the editor with the generated values
+      setEditing({
+        id: null,
+        name: result.name ?? '',
+        description: result.description ?? '',
+        trigger_type: result.trigger_type ?? 'manual',
+        trigger_value: result.trigger_value ?? '',
+        system_prompt: result.system_prompt ?? '',
+        allowed_skill_names: result.allowed_skill_names ?? [],
+        active: result.active ?? true,
+      })
+    } catch (err) {
+      setGenError(err.message || 'Generation failed. Check the backend logs.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-6">
       <SectionHeader
@@ -429,6 +459,9 @@ export default function RoutinesPage() {
         subtitle="Scheduled routines and on-demand tasks. Zero Python required."
         actions={
           <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowGenerate(true)}>
+              <Cpu size={14} /> Generate with AI
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setShowImport(true)}>
               <FileJson size={14} /> Import / Schema
             </Button>
@@ -492,6 +525,50 @@ export default function RoutinesPage() {
         }}
         skills={skills}
       />
+
+      {/* Generate with AI modal */}
+      <Modal
+        open={showGenerate}
+        onClose={() => { setShowGenerate(false); setGenPrompt(''); setGenError('') }}
+        title="Generate Routine with AI"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-jarvis-muted">
+            Describe what you want JARVIS to do automatically. The AI will generate a complete routine
+            configuration — you can review and edit it before saving.
+          </p>
+          <div>
+            <label className="text-xs text-jarvis-muted block mb-1.5">Describe your routine</label>
+            <Textarea
+              value={genPrompt}
+              onChange={e => setGenPrompt(e.target.value)}
+              placeholder="e.g. Every morning at 8am, check the weather and send me a summary with what to wear. Also check if any urgent tasks are due today."
+              className="min-h-[100px]"
+              disabled={generating}
+            />
+          </div>
+          {genError && <p className="text-xs text-red-400">{genError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => { setShowGenerate(false); setGenPrompt('') }}>
+              Cancel
+            </Button>
+            <Button
+              variant="solid"
+              size="sm"
+              onClick={generateRoutine}
+              disabled={!genPrompt.trim() || generating}
+            >
+              {generating ? <><Spinner size={12} /> Generating…</> : <><Sparkles size={13} /> Generate</>}
+            </Button>
+          </div>
+          {generating && (
+            <p className="text-[10px] text-jarvis-muted text-center">
+              Calling JARVIS… this may take 10–30 seconds depending on the model.
+            </p>
+          )}
+        </div>
+      </Modal>
     </div>
   )
 }

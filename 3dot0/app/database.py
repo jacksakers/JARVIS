@@ -56,8 +56,14 @@ def _run_migrations() -> None:
             ("journal_entries", "updated_at",    "ALTER TABLE journal_entries ADD COLUMN updated_at DATETIME"),
             # Task: waiting-for-user support
             ("tasks",           "question_feed_item_id", "ALTER TABLE tasks ADD COLUMN question_feed_item_id INTEGER DEFAULT NULL"),
+            # Task: conversation state & chat conversation link
+            ("tasks",           "conversation_state",    "ALTER TABLE tasks ADD COLUMN conversation_state TEXT DEFAULT NULL"),
+            ("tasks",           "conversation_id",       "ALTER TABLE tasks ADD COLUMN conversation_id INTEGER DEFAULT NULL"),
             # Feed item: store user reply
             ("feed_items",      "reply_text",   "ALTER TABLE feed_items ADD COLUMN reply_text TEXT DEFAULT NULL"),
+            # User: auth & bio
+            ("users",           "password_hash", "ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL"),
+            ("users",           "bio",           "ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''"),
         ]
 
         for table, column, sql in migrations:

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { BookOpen, Plus, Trash2, RefreshCw, Settings2, ChevronDown, ChevronUp, Eye, EyeOff, Edit3, Unlock } from 'lucide-react'
+import { BookOpen, Plus, Trash2, RefreshCw, Settings2, ChevronDown, ChevronUp, Eye, EyeOff, Edit3, Unlock, Search, X } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { GlassPanel, Button, Badge, EmptyState, Spinner, SectionHeader, Textarea, Toggle } from '../components/ui'
 import useStore from '../store'
@@ -171,15 +171,24 @@ export default function JournalPage() {
   const [llmEdit,  setLlmEdit]  = useState(false)
   const [showOpts, setShowOpts] = useState(false)
   const [saving,   setSaving]   = useState(false)
+  const [search,   setSearch]   = useState('')
   const inputRef = useRef(null)
 
-  const load = async () => {
+  const load = async (searchTerm = '') => {
     setLoading(true)
-    const data = await API.getJournal({}, mockMode)
+    const params = {}
+    if (searchTerm) params.search = searchTerm
+    const data = await API.getJournal(params, mockMode)
     setEntries(data)
     setLoading(false)
   }
   useEffect(() => { load() }, [mockMode])
+
+  // Debounced search
+  useEffect(() => {
+    const t = setTimeout(() => load(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
 
   const save = async () => {
     const text = input.trim()
@@ -220,10 +229,26 @@ export default function JournalPage() {
             {unprocessed > 0 && (
               <span className="text-xs text-jarvis-amber">{unprocessed} unanalysed</span>
             )}
-            <Button variant="ghost" size="sm" onClick={load}><RefreshCw size={14} /></Button>
+            <Button variant="ghost" size="sm" onClick={() => load(search)}><RefreshCw size={14} /></Button>
           </div>
         }
       />
+
+      {/* Search */}
+      <div className="relative mb-4">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-jarvis-muted" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search entries by title or content…"
+          className="glass w-full rounded-lg pl-9 pr-8 py-2 text-sm text-jarvis-text placeholder:text-jarvis-muted/50 outline-none focus:border-jarvis-cyan/50"
+        />
+        {search && (
+          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-jarvis-muted hover:text-white">
+            <X size={12} />
+          </button>
+        )}
+      </div>
 
       {/* Quick capture */}
       <GlassPanel className="p-4 mb-6 glow-border">

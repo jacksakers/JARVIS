@@ -81,7 +81,37 @@ export const getSkills = (mock) => get('/api/v1/skills/', mock, Mock.getSkills)
 
 // ── Users ─────────────────────────────────────────────────────────────────
 
-export const getMe = (mock) => get('/api/v1/users/me', mock, Mock.getMe)
+export const getMe    = (mock)            => get('/api/v1/users/me', mock, Mock.getMe)
+export const updateMe = (payload, mock)   => patch('/api/v1/users/me', payload, mock, () => null)
+export const getUsers = (mock)            => get('/api/v1/users/', mock, () => [])
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+
+export const login          = (username, password) =>
+  post('/api/v1/auth/login', { username, password }, false, () => null)
+export const register       = (username, password) =>
+  post('/api/v1/auth/register', { username, password }, false, () => null)
+export const getAuthMe      = (token)              =>
+  get(`/api/v1/auth/me?token=${encodeURIComponent(token)}`, false, () => null)
+export const updateAuthMe   = (token, payload)     =>
+  request('PATCH', `/api/v1/auth/me?token=${encodeURIComponent(token)}`, payload, false, () => null)
+export const logoutAuth     = (token)              =>
+  request('POST', `/api/v1/auth/logout?token=${encodeURIComponent(token)}`, null, false, () => null)
+
+// ── Conversations ─────────────────────────────────────────────────────────
+
+export const getConversations   = (mock)           => get('/api/v1/conversations/', mock, () => [])
+export const createConversation = (payload, mock)  => post('/api/v1/conversations/', payload, mock, () => null)
+export const updateConversation = (id, data, mock) => patch(`/api/v1/conversations/${id}`, data, mock, () => null)
+export const deleteConversation = (id, mock)       => del(`/api/v1/conversations/${id}`, mock, () => null)
+export const getConversationMessages = (id, mock)  => get(`/api/v1/conversations/${id}/messages`, mock, () => [])
+export const sendConversationMessage = (id, content, mock) =>
+  post(`/api/v1/conversations/${id}/messages`, { content }, mock, () => null)
+
+// ── Routines generate ─────────────────────────────────────────────────────
+
+export const generateRoutine = (description, mock) =>
+  post('/api/v1/routines/generate', { description }, mock, () => null)
 
 // ── Health ────────────────────────────────────────────────────────────────
 
