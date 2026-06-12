@@ -226,6 +226,7 @@ class BackgroundWorker:
         # Set thread-local task_id so skills like ask_user can reference it
         import app.skills.ask_user_skill as _ask_mod
         _ask_mod._current_task.task_id = task_id
+        _ask_mod._current_task.user_id = 1 # TODO: Get real user id
         _ask_mod._current_task.memory = memory
 
         agent = AgentLoop(
