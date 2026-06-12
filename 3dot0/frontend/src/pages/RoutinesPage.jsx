@@ -10,6 +10,64 @@ import useStore from '../store'
 import * as API from '../api'
 import clsx from 'clsx'
 
+// ── Timezone utilities ───────────────────────────────────────────────────
+
+/**
+ * Get the timezone offset for Eastern Time at a given date.
+ * Returns -4 for EDT (daylight) or -5 for EST (standard).
+ */
+function getEasternOffset(date = new Date()) {
+  const year = date.getFullYear()
+  // DST: Second Sunday in March to First Sunday in November
+  const marchSecond = new Date(year, 2, 8) // March 8
+  while (marchSecond.getDay() !== 0) marchSecond.setDate(marchSecond.getDate() + 1)
+  
+  const novemberFirst = new Date(year, 10, 1) // November 1
+  while (novemberFirst.getDay() !== 0) novemberFirst.setDate(novemberFirst.getDate() + 1)
+  
+  return (date >= marchSecond && date < novemberFirst) ? -4 : -5
+}
+
+/**
+ * Convert a cron expression from UTC to Eastern Time.
+ * Only the hour field is adjusted; minutes and other fields remain the same.
+ */
+function cronUTCToEastern(cronExpr) {
+  if (!cronExpr) return cronExpr
+  const parts = cronExpr.trim().split(/\s+/)
+  if (parts.length !== 5) return cronExpr
+  
+  const offset = getEasternOffset()
+  let hour = parseInt(parts[1])
+  
+  // Convert from UTC to Eastern (subtract offset)
+  // e.g., 10 UTC - 4 = 6 AM Eastern (with wraparound)
+  hour = (hour - Math.abs(offset) + 24) % 24
+  
+  parts[1] = hour.toString()
+  return parts.join(' ')
+}
+
+/**
+ * Convert a cron expression from Eastern Time to UTC.
+ * Only the hour field is adjusted; minutes and other fields remain the same.
+ */
+function cronEasternToUTC(cronExpr) {
+  if (!cronExpr) return cronExpr
+  const parts = cronExpr.trim().split(/\s+/)
+  if (parts.length !== 5) return cronExpr
+  
+  const offset = getEasternOffset()
+  let hour = parseInt(parts[1])
+  
+  // Convert from Eastern to UTC (add offset)
+  // e.g., 6 AM Eastern + 4 = 10 UTC (with wraparound)
+  hour = (hour + Math.abs(offset)) % 24
+  
+  parts[1] = hour.toString()
+  return parts.join(' ')
+}
+
 // ── JSON Schema for AI Agent ─────────────────────────────────────────────
 
 const ROUTINE_SCHEMA = {
@@ -60,7 +118,7 @@ function RoutineEditor({ routine, skills, onSave, onClose }) {
     name:               routine?.name               ?? '',
     description:        routine?.description        ?? '',
     trigger_type:       routine?.trigger_type       ?? 'cron',
-    trigger_value:      routine?.trigger_value      ?? '0 9 * * *',
+    trigger_value:      routine?.trigger_value ? cronUTCToEastern(routine.trigger_value) : '0 9 * * *',
     system_prompt:      routine?.system_prompt      ?? '',
     allowed_skill_names:routine?.allowed_skill_names ?? '[]',
     active:             routine?.active              ?? true,
@@ -81,7 +139,12 @@ function RoutineEditor({ routine, skills, onSave, onClose }) {
     if (!form.name.trim()) return
     setSaving(true)
     try {
-      await onSave(form)
+      // Convert trigger_value from Eastern time back to UTC before sending
+      const payload = {
+        ...form,
+        trigger_value: form.trigger_type === 'cron' ? cronEasternToUTC(form.trigger_value) : form.trigger_value,
+      }
+      await onSave(payload)
       onClose()
     } catch (e) {
       console.error(e)
@@ -117,6 +180,10 @@ function RoutineEditor({ routine, skills, onSave, onClose }) {
         {/* ── Schedule tab ── */}
         {tab === 'schedule' && (
           <>
+            <div className="glass rounded-lg p-3 text-xs text-jarvis-muted mb-4 border-jarvis-cyan/10">
+              <p className="text-jarvis-cyan/70 font-medium mb-1">🕐 Times in Eastern Time</p>
+              <p>All times are displayed and set in Eastern Time. The system automatically converts to UTC for scheduling.</p>
+            </div>
             <Input label="Name" value={form.name} onChange={e => set('name')(e.target.value)} placeholder="e.g. Morning Briefing" />
             <Input label="Description (optional)" value={form.description} onChange={e => set('description')(e.target.value)} placeholder="What does this routine do?" />
 
@@ -176,6 +243,7 @@ function RoutineEditor({ routine, skills, onSave, onClose }) {
               <p>• Tell JARVIS which tools to call and in what order.</p>
               <p>• Specify the output format (Markdown headings, bullet points, etc.).</p>
               <p>• Reference allowed skills by name: <code className="text-jarvis-cyan/70">get_system_time</code>, <code className="text-jarvis-cyan/70">search_memory</code>.</p>
+              <p>• Times are shown in Eastern time (your local timezone).</p>
             </div>
           </>
         )}
@@ -270,7 +338,7 @@ function RoutineCard({ routine, onEdit, onToggle, onDelete, onRun }) {
                 <Badge type={routine.trigger_type}>{routine.trigger_type}</Badge>
                 {routine.trigger_type === 'cron' && routine.trigger_value && (
                   <span className="text-[11px] text-jarvis-cyan/80 font-mono">
-                    {humanReadable(routine.trigger_value)}
+                    {humanReadable(cronUTCToEastern(routine.trigger_value))}
                   </span>
                 )}
               </div>
@@ -309,11 +377,12 @@ function ImportExportModal({ open, onClose, onImport, skills }) {
   const importJson = () => {
     try {
       const obj = JSON.parse(json)
+      const cronValue = obj.trigger?.cron ?? ''
       const payload = {
         name:               obj.name,
         description:        obj.description ?? '',
         trigger_type:       obj.trigger?.type ?? 'manual',
-        trigger_value:      obj.trigger?.cron ?? '',
+        trigger_value:      cronValue ? cronUTCToEastern(cronValue) : '',
         system_prompt:      obj.system_prompt ?? '',
         allowed_skill_names:JSON.stringify(obj.allowed_skills ?? []),
         active:             obj.active ?? true,
@@ -435,12 +504,14 @@ export default function RoutinesPage() {
       setShowGenerate(false)
       setGenPrompt('')
       // Pre-populate the editor with the generated values
+      // Convert UTC cron to Eastern time for display
+      const easternCron = result.trigger_value ? cronUTCToEastern(result.trigger_value) : '0 9 * * *'
       setEditing({
         id: null,
         name: result.name ?? '',
         description: result.description ?? '',
         trigger_type: result.trigger_type ?? 'manual',
-        trigger_value: result.trigger_value ?? '',
+        trigger_value: easternCron,
         system_prompt: result.system_prompt ?? '',
         allowed_skill_names: result.allowed_skill_names ?? [],
         active: result.active ?? true,
