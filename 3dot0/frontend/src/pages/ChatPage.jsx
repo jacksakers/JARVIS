@@ -157,7 +157,7 @@ function ConvItem({ conv, active, onSelect, onDelete, onRename }) {
         <span className="flex-1 truncate text-xs">{conv.title || 'New chat'}</span>
       )}
       <div
-        className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="flex gap-1 group-hover:opacity-100 transition-opacity"
         onClick={e => e.stopPropagation()}
       >
         {editing ? (

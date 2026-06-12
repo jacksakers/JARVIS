@@ -139,18 +139,18 @@ function JournalEntryCard({ entry, onDelete, onChange }) {
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {expanded && !editMode && (
-              <button onClick={() => setEditMode(true)} className="p-1 text-jarvis-muted hover:text-jarvis-cyan opacity-0 group-hover:opacity-100 transition-opacity" title="Edit content">
+              <button onClick={() => setEditMode(true)} className="p-1 text-jarvis-muted hover:text-jarvis-cyan group-hover:opacity-100 transition-opacity" title="Edit content">
                 <Edit3 size={13} />
               </button>
             )}
             <button
               onClick={() => setShowSettings(s => !s)}
-              className={clsx('p-1 transition-opacity', showSettings ? 'text-jarvis-cyan' : 'text-jarvis-muted hover:text-jarvis-text opacity-0 group-hover:opacity-100')}
+              className={clsx('p-1 transition-opacity', showSettings ? 'text-jarvis-cyan' : 'text-jarvis-muted hover:text-jarvis-text group-hover:opacity-100')}
               title="Settings"
             >
               <Settings2 size={13} />
             </button>
-            <button onClick={() => onDelete(entry.id)} className="p-1 text-jarvis-muted hover:text-jarvis-red opacity-0 group-hover:opacity-100 transition-opacity" title="Delete">
+            <button onClick={() => onDelete(entry.id)} className="p-1 text-jarvis-muted hover:text-jarvis-red group-hover:opacity-100 transition-opacity" title="Delete">
               <Trash2 size={13} />
             </button>
           </div>

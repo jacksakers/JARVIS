@@ -61,7 +61,7 @@ function FeedItem({ item, onMarkRead, onReply, onDelete }) {
           <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
             <button
               onClick={() => onDelete(item.id)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-jarvis-muted hover:text-jarvis-red"
+              className="group-hover:opacity-100 transition-opacity p-1 text-jarvis-muted hover:text-jarvis-red"
               title="Delete"
             >
               <Trash2 size={13} />
