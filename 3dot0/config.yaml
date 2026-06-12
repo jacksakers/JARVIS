@@ -15,6 +15,8 @@ server:
   host: "0.0.0.0"   # Bind to all interfaces (Tailscale + local)
   port: 8000
   reload: false      # Set true for development hot-reload
+  # IANA timezone name for the scheduler (cron triggers fire in this zone)
+  timezone: "America/New_York"
 
 worker:
   poll_interval_seconds: 2      # How often the worker checks the job queue

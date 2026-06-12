@@ -54,10 +54,9 @@ class ToolRegistry:
     def get_filtered_schemas(self, allowed_names: List[str]) -> List[dict]:
         """
         Return schemas filtered to the given allowlist.
-        An empty allowlist means all skills are permitted.
+        An empty list means NO skills are permitted (routine has none checked).
+        Pass None to get_all_tool_schemas() instead if you want all skills.
         """
-        if not allowed_names:
-            return self.get_all_tool_schemas()
         return [
             cls.get_ollama_tool_schema()
             for name, cls in self.tools.items()

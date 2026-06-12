@@ -32,9 +32,12 @@ class RoutineScheduler:
 
     def __init__(self, worker: "BackgroundWorker") -> None:
         self._worker = worker
+        from app.config import load_config
+        cfg = load_config()
+        tz = cfg.get("server", {}).get("timezone", "UTC")
         self._scheduler = BackgroundScheduler(
             job_defaults={"coalesce": True, "max_instances": 1},
-            timezone="UTC",
+            timezone=tz,
         )
 
     def start(self) -> None:

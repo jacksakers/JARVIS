@@ -1,11 +1,12 @@
 """API router: journal entries (Quick Capture)."""
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import JournalEntry, JournalEntryCreate, JournalEntryRead, User
+from app.models import JournalEntry, JournalEntryCreate, JournalEntryRead, JournalEntryUpdate, User
 
 router = APIRouter(prefix="/journal", tags=["journal"])
 
@@ -38,7 +39,36 @@ def create_entry(
 ):
     """Quick capture — save a raw thought to the journal."""
     user = _get_default_user(session)
-    entry = JournalEntry(user_id=user.id, content=payload.content)
+    now = datetime.now(timezone.utc)
+    entry = JournalEntry(
+        user_id=user.id,
+        title=payload.title,
+        content=payload.content,
+        llm_readable=payload.llm_readable,
+        llm_editable=payload.llm_editable,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(entry)
+    session.commit()
+    session.refresh(entry)
+    return entry
+
+
+@router.patch("/{entry_id}", response_model=JournalEntryRead)
+def update_entry(
+    entry_id: int,
+    payload: JournalEntryUpdate,
+    session: Session = Depends(get_session),
+):
+    """Update a journal entry's content, title, or settings."""
+    entry = session.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Journal entry not found.")
+    update_data = payload.model_dump(exclude_unset=True)
+    for key, val in update_data.items():
+        setattr(entry, key, val)
+    entry.updated_at = datetime.now(timezone.utc)
     session.add(entry)
     session.commit()
     session.refresh(entry)

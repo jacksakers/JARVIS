@@ -25,6 +25,15 @@ from app.core.tool_registry import ToolRegistry
 # event_type values: "tool_call", "tool_result", "content_chunk", "error"
 EventCallback = Callable[[str, Dict[str, Any]], None]
 
+SENTINEL_WAITING = "__WAITING_FOR_USER__:"
+
+
+class UserInputRequired(Exception):
+    """Raised when the ask_user skill pauses execution pending a user reply."""
+    def __init__(self, feed_item_id: int) -> None:
+        self.feed_item_id = feed_item_id
+        super().__init__(f"Waiting for user reply on feed item {feed_item_id}")
+
 
 class AgentLoop:
     """
@@ -69,8 +78,10 @@ class AgentLoop:
         """
         Process one full user turn.
 
-        allowed_skill_names: if provided, only those skills are exposed to the
-        LLM.  Pass None or [] to expose all skills.
+        allowed_skill_names:
+          - None → expose ALL skills (default for manual tasks)
+          - []   → expose NO skills (routine with nothing checked)
+          - ['x'] → expose only skill 'x'
 
         Returns the final assistant text (Markdown), or None if interrupted.
         """
@@ -81,6 +92,9 @@ class AgentLoop:
             if allowed_skill_names is not None
             else self.registry.get_all_tool_schemas()
         )
+        # Empty tool list → send None so the LLM doesn't get an empty array
+        if tools is not None and len(tools) == 0:
+            tools = None
 
         for iteration in range(self.MAX_TOOL_ITERATIONS):
             if self.stop_event.is_set():
@@ -176,6 +190,11 @@ class AgentLoop:
             self.on_event("tool_call", {"name": tc.name, "arguments": tc.arguments})
 
             result = self._run_one_tool(tc.name, tc.arguments)
+
+            # Detect ask_user sentinel — pause the agent loop
+            if result.startswith(SENTINEL_WAITING):
+                feed_item_id = int(result[len(SENTINEL_WAITING):])
+                raise UserInputRequired(feed_item_id)
 
             self.on_event("tool_result", {"name": tc.name, "result": result[:300]})
 

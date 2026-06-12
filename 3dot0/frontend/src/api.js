@@ -36,8 +36,13 @@ export const getFeed = (params = {}, mock) => {
   const qs = new URLSearchParams(params).toString()
   return get(`/api/v1/feed/?${qs}`, mock, Mock.getFeed)
 }
-export const markRead    = (id, mock) => post(`/api/v1/feed/${id}/read`,  null, mock, () => Mock.markRead(id))
-export const markAllRead = (mock)     => post('/api/v1/feed/read-all',    null, mock, Mock.markAllRead)
+export const markRead      = (id, mock) => post(`/api/v1/feed/${id}/read`,    null, mock, () => Mock.markRead(id))
+export const markAllRead   = (mock)     => post('/api/v1/feed/read-all',       null, mock, Mock.markAllRead)
+export const deleteFeedItem = (id, mock) => del(`/api/v1/feed/${id}`,          mock, () => null)
+export const bulkDeleteFeed = (readOnly = true, mock) =>
+  del(`/api/v1/feed/?read_only=${readOnly}`, mock, () => ({ deleted: 0 }))
+export const replyToQuestion = (id, replyText, mock) =>
+  post(`/api/v1/feed/${id}/reply`, { reply_text: replyText }, mock, () => null)
 
 // ── Tasks ─────────────────────────────────────────────────────────────────
 
@@ -45,9 +50,11 @@ export const getTasks    = (params = {}, mock) => {
   const qs = new URLSearchParams(params).toString()
   return get(`/api/v1/tasks/?${qs}`, mock, Mock.getTasks)
 }
-export const submitTask  = (payload, mock)     => post('/api/v1/tasks/',          payload, mock, () => Mock.submitTask(payload))
-export const cancelTask  = (id, mock)          => del(`/api/v1/tasks/${id}`,      mock, () => Mock.cancelTask(id))
-export const retryTask   = (id, mock)          => post(`/api/v1/tasks/${id}/retry`, null, mock, () => Mock.retryTask(id))
+export const submitTask  = (payload, mock)     => post('/api/v1/tasks/',             payload, mock, () => Mock.submitTask(payload))
+export const cancelTask  = (id, mock)          => del(`/api/v1/tasks/${id}`,         mock, () => Mock.cancelTask(id))
+export const retryTask   = (id, mock)          => post(`/api/v1/tasks/${id}/retry`,  null, mock, () => Mock.retryTask(id))
+export const bulkDeleteTasks = (statusFilter = 'done,failed', mock) =>
+  del(`/api/v1/tasks/?status_filter=${statusFilter}`, mock, () => ({ deleted: 0 }))
 
 // ── Routines ──────────────────────────────────────────────────────────────
 
@@ -65,6 +72,7 @@ export const getJournal     = (params = {}, mock) => {
   return get(`/api/v1/journal/?${qs}`, mock, Mock.getJournal)
 }
 export const createJournal  = (payload, mock) => post('/api/v1/journal/', payload, mock, () => Mock.createJournal(payload))
+export const updateJournal  = (id, payload, mock) => patch(`/api/v1/journal/${id}`, payload, mock, () => null)
 export const deleteJournal  = (id, mock)      => del(`/api/v1/journal/${id}`, mock, () => Mock.deleteJournal(id))
 
 // ── Skills ────────────────────────────────────────────────────────────────

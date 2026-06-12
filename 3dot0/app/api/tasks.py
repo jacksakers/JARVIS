@@ -113,3 +113,27 @@ def retry_task(task_id: int, session: Session = Depends(get_session)):
         {"task_id": new_task.id, "prompt": new_task.prompt[:100]},
     )
     return new_task
+
+
+@router.delete("/", status_code=status.HTTP_200_OK)
+def bulk_delete_tasks(
+    status_filter: Optional[str] = Query(
+        default="done,failed",
+        description="Comma-separated statuses to delete, e.g. 'done,failed'. Use 'all' to delete everything.",
+    ),
+    session: Session = Depends(get_session),
+):
+    """Bulk-delete tasks by status (defaults to done + failed)."""
+    user = _get_default_user(session)
+    query = select(Task).where(Task.user_id == user.id)
+
+    if status_filter and status_filter.lower() != "all":
+        statuses = [s.strip() for s in status_filter.split(",")]
+        query = query.where(Task.status.in_(statuses))
+
+    tasks = session.exec(query).all()
+    count = len(tasks)
+    for t in tasks:
+        session.delete(t)
+    session.commit()
+    return {"deleted": count}

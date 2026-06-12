@@ -29,7 +29,7 @@ const ROUTINE_SCHEMA = {
       required: ['type'],
     },
     system_prompt: { type: 'string', description: 'The full instructions JARVIS will follow when running this routine.' },
-    allowed_skills:{ type: 'array',  items: { type: 'string' }, description: 'Skill names JARVIS can use. Empty array = all skills.' },
+    allowed_skills:{ type: 'array',  items: { type: 'string' }, description: 'Skill names JARVIS can use. Empty array = no tools. To grant all skills, list them all.' },
     active:        { type: 'boolean', default: true },
   },
 }
@@ -183,8 +183,22 @@ function RoutineEditor({ routine, skills, onSave, onClose }) {
         {/* ── Skills tab ── */}
         {tab === 'skills' && (
           <>
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-xs text-jarvis-muted">Select which skills this routine can use. Leave all unchecked to allow all.</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-jarvis-muted">Select which skills this routine can use. <strong className="text-jarvis-amber">Nothing checked = no tools available.</strong></p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setForm(f => ({ ...f, allowed_skill_names: JSON.stringify(skills.map(s => s.name)) }))}
+                  className="text-[10px] text-jarvis-cyan hover:text-jarvis-cyan-bright border border-jarvis-cyan/20 px-2 py-1 rounded transition-colors"
+                >
+                  Select all
+                </button>
+                <button
+                  onClick={() => setForm(f => ({ ...f, allowed_skill_names: '[]' }))}
+                  className="text-[10px] text-jarvis-muted hover:text-jarvis-text border border-jarvis-border px-2 py-1 rounded transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               {skills.map(skill => (
@@ -204,7 +218,7 @@ function RoutineEditor({ routine, skills, onSave, onClose }) {
               {skills.length === 0 && <p className="text-jarvis-muted text-sm">No skills loaded.</p>}
             </div>
             <p className="text-xs text-jarvis-muted">
-              {allowedSkills.length === 0 ? '⚡ All skills available' : `✓ ${allowedSkills.length} skill${allowedSkills.length > 1 ? 's' : ''} selected`}
+              {allowedSkills.length === 0 ? '⛔ No skills selected — routine will run without tools' : `✓ ${allowedSkills.length} skill${allowedSkills.length > 1 ? 's' : ''} selected`}
             </p>
           </>
         )}

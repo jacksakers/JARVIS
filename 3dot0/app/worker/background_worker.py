@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.config import load_config
-from app.core.agent_loop import AgentLoop
+from app.core.agent_loop import AgentLoop, UserInputRequired
 from app.core.markdown_utils import extract_title, render_markdown
 from app.core.memory_manager import IntelligentMemoryManager
 from app.core.tool_registry import ToolRegistry
@@ -159,6 +159,8 @@ class BackgroundWorker:
                 routine_id=task_routine_id,
                 content_markdown=result_md or "",
             )
+        except UserInputRequired as exc:
+            self._mark_waiting(task_id, exc.feed_item_id)
         except Exception as exc:
             logger.exception("Task %d failed: %s", task_id, exc)
             self._mark_failed(task_id, str(exc))
@@ -172,7 +174,7 @@ class BackgroundWorker:
     ) -> Optional[str]:
         """Set up and run the AgentLoop for this task."""
         system_prompt = system_prompt_override or _DEFAULT_SYSTEM_PROMPT
-        allowed_skills: List[str] = []
+        allowed_skills: Optional[List[str]] = None  # None = all skills
 
         if routine_id:
             with session_scope() as session:
@@ -180,6 +182,7 @@ class BackgroundWorker:
                 if routine:
                     if routine.system_prompt:
                         system_prompt = routine.system_prompt
+                    # Use the routine's explicit skill list (may be empty = no skills)
                     allowed_skills = routine.get_allowed_skills()
 
         memory = IntelligentMemoryManager(
@@ -191,6 +194,10 @@ class BackgroundWorker:
         def on_event(event_type: str, data: Dict[str, Any]) -> None:
             manager.broadcast_from_thread(event_type, {"task_id": task_id, **data})
 
+        # Set thread-local task_id so skills like ask_user can reference it
+        import app.skills.ask_user_skill as _ask_mod
+        _ask_mod._current_task.task_id = task_id
+
         agent = AgentLoop(
             llm=self._llm,
             registry=self._registry,
@@ -199,7 +206,7 @@ class BackgroundWorker:
         )
         agent.MAX_TOOL_ITERATIONS = self._max_tool_iterations
 
-        return agent.run_turn(prompt, allowed_skill_names=allowed_skills or None)
+        return agent.run_turn(prompt, allowed_skill_names=allowed_skills)
 
     def _save_result(
         self,
@@ -259,6 +266,20 @@ class BackgroundWorker:
             "task_failed",
             {"task_id": task_id, "error": error[:200]},
         )
+
+    def _mark_waiting(self, task_id: int, feed_item_id: int) -> None:
+        with session_scope() as session:
+            task = session.get(Task, task_id)
+            if task:
+                task.status = TaskStatus.waiting
+                task.question_feed_item_id = feed_item_id
+                session.add(task)
+
+        manager.broadcast_from_thread(
+            "task_waiting",
+            {"task_id": task_id, "feed_item_id": feed_item_id},
+        )
+        logger.info("Task %d is waiting for user reply (feed item %d).", task_id, feed_item_id)
 
     @staticmethod
     def _infer_feed_type(routine_id: Optional[int]) -> FeedItemType:

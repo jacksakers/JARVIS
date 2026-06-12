@@ -22,6 +22,7 @@ class TaskStatus(str, Enum):
     running = "running"
     done = "done"
     failed = "failed"
+    waiting = "waiting"  # Paused — waiting for user reply to a question
 
 
 class TriggerType(str, Enum):
@@ -150,6 +151,8 @@ class Task(SQLModel, table=True):
 
     status: TaskStatus = Field(default=TaskStatus.queued, index=True)
     error_message: Optional[str] = Field(default=None)
+    # Set when the task is paused waiting for a user reply (ask_user skill)
+    question_feed_item_id: Optional[int] = Field(default=None)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Field(default=None)
@@ -182,6 +185,8 @@ class FeedItem(SQLModel, table=True):
     content_html: str = Field(default="")
 
     is_read: bool = Field(default=False)
+    # Stored when the user replies to a 'question' type feed item
+    reply_text: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
@@ -199,10 +204,17 @@ class JournalEntry(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)
 
+    # Optional title (e.g. "Shopping List", "Project Ideas")
+    title: str = Field(default="", index=True)
     content: str
     # Set to True after the background Journal Analysis routine processes this entry
     processed: bool = Field(default=False, index=True)
+    # Whether the AI is allowed to read this entry
+    llm_readable: bool = Field(default=True)
+    # Whether the AI is allowed to edit (append/replace) this entry
+    llm_editable: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     user: Optional["User"] = Relationship(back_populates="journal_entries")
@@ -266,6 +278,7 @@ class TaskRead(SQLModel):
     prompt: str
     status: TaskStatus
     error_message: Optional[str]
+    question_feed_item_id: Optional[int]
     created_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
@@ -280,19 +293,35 @@ class FeedItemRead(SQLModel):
     content_markdown: str
     content_html: str
     is_read: bool
+    reply_text: Optional[str]
     created_at: datetime
 
 
 class JournalEntryCreate(SQLModel):
+    title: str = ""
     content: str
+    llm_readable: bool = True
+    llm_editable: bool = False
+
+
+class JournalEntryUpdate(SQLModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    processed: Optional[bool] = None
+    llm_readable: Optional[bool] = None
+    llm_editable: Optional[bool] = None
 
 
 class JournalEntryRead(SQLModel):
     id: int
     user_id: int
+    title: str
     content: str
     processed: bool
+    llm_readable: bool
+    llm_editable: bool
     created_at: datetime
+    updated_at: datetime
 
 
 class SkillRead(SQLModel):

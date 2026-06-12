@@ -19,6 +19,22 @@ export default function AppShell() {
     return () => disconnectWS()
   }, [mockMode])
 
+  // Lock body scroll when mobile drawer is open; unlock on close
+  // This prevents the backdrop from leaving a scroll-lock behind on iOS
+  useEffect(() => {
+    if (drawerOpen) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.touchAction = 'none'
+    } else {
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
+    }
+  }, [drawerOpen])
+
   return (
     <div className="flex h-full bg-jarvis-bg bg-grid scanline">
       {/* Ambient hex glow */}
@@ -35,7 +51,7 @@ export default function AppShell() {
           <>
             <motion.div
               key="backdrop"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, pointerEvents: 'none' }}
               className="fixed inset-0 bg-black/60 z-40 md:hidden"
               onClick={() => setDrawerOpen(false)}
             />

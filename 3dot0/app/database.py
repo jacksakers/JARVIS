@@ -33,6 +33,40 @@ def init_db() -> None:
     # Import models so SQLModel sees them before create_all
     import app.models  # noqa: F401
     SQLModel.metadata.create_all(get_engine())
+    _run_migrations()
+
+
+def _run_migrations() -> None:
+    """Apply incremental schema migrations for new columns added after initial release."""
+    import sqlite3
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.cursor()
+
+        def _column_exists(table: str, column: str) -> bool:
+            cursor.execute(f"PRAGMA table_info({table})")
+            return any(row[1] == column for row in cursor.fetchall())
+
+        migrations = [
+            # Journal entry enhancements
+            ("journal_entries", "title",        "ALTER TABLE journal_entries ADD COLUMN title TEXT NOT NULL DEFAULT ''"),
+            ("journal_entries", "llm_readable",  "ALTER TABLE journal_entries ADD COLUMN llm_readable INTEGER NOT NULL DEFAULT 1"),
+            ("journal_entries", "llm_editable",  "ALTER TABLE journal_entries ADD COLUMN llm_editable INTEGER NOT NULL DEFAULT 0"),
+            ("journal_entries", "updated_at",    "ALTER TABLE journal_entries ADD COLUMN updated_at DATETIME"),
+            # Task: waiting-for-user support
+            ("tasks",           "question_feed_item_id", "ALTER TABLE tasks ADD COLUMN question_feed_item_id INTEGER DEFAULT NULL"),
+            # Feed item: store user reply
+            ("feed_items",      "reply_text",   "ALTER TABLE feed_items ADD COLUMN reply_text TEXT DEFAULT NULL"),
+        ]
+
+        for table, column, sql in migrations:
+            if not _column_exists(table, column):
+                cursor.execute(sql)
+
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def make_session() -> Session:

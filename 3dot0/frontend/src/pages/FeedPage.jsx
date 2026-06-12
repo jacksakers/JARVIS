@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Inbox, RefreshCw, CheckCheck, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
+import { Inbox, RefreshCw, CheckCheck, ChevronDown, ChevronUp, MessageSquare, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { formatDistanceToNow } from 'date-fns'
@@ -13,7 +13,7 @@ const FILTERS = ['all', 'briefing', 'report', 'reflection', 'question', 'action'
 
 // ── FeedItem ──────────────────────────────────────────────────────────────
 
-function FeedItem({ item, onMarkRead, onReply }) {
+function FeedItem({ item, onMarkRead, onReply, onDelete }) {
   const [expanded, setExpanded] = useState(item.type === 'question' || !item.is_read)
 
   return (
@@ -26,7 +26,7 @@ function FeedItem({ item, onMarkRead, onReply }) {
     >
       <GlassPanel
         className={clsx(
-          'overflow-hidden transition-all',
+          'overflow-hidden transition-all group',
           !item.is_read && 'border-jarvis-cyan/30',
           item.type === 'question' && 'border-jarvis-amber/30'
         )}
@@ -56,9 +56,18 @@ function FeedItem({ item, onMarkRead, onReply }) {
             </p>
           </div>
 
-          <button className="shrink-0 text-jarvis-muted hover:text-jarvis-text p-1">
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
+          <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => onDelete(item.id)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-jarvis-muted hover:text-jarvis-red"
+              title="Delete"
+            >
+              <Trash2 size={13} />
+            </button>
+            <button className="p-1 text-jarvis-muted hover:text-jarvis-text">
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          </div>
         </div>
 
         {/* Expanded content */}
@@ -86,9 +95,16 @@ function FeedItem({ item, onMarkRead, onReply }) {
                     </ReactMarkdown>
                 }
 
-                {/* Reply box for questions */}
-                {item.type === 'question' && (
+                {/* Reply box for unanswered questions */}
+                {item.type === 'question' && !item.reply_text && (
                   <ReplyBox item={item} onReply={onReply} />
+                )}
+                {/* Show existing reply */}
+                {item.type === 'question' && item.reply_text && (
+                  <div className="mt-3 text-sm text-jarvis-muted border-t border-jarvis-border pt-3">
+                    <span className="text-jarvis-cyan/60 text-xs font-mono">Your reply: </span>
+                    {item.reply_text}
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -176,8 +192,20 @@ export default function FeedPage() {
     setUnread(0)
   }
 
+  const deleteItem = async (id) => {
+    await API.deleteFeedItem(id, mockMode)
+    setItems(prev => prev.filter(i => i.id !== id))
+    setUnread(prev => Math.max(0, prev))
+  }
+
+  const bulkClean = async () => {
+    await API.bulkDeleteFeed(true, mockMode)
+    await load()
+  }
+
   const handleReply = async (item, text) => {
-    await API.submitTask({ prompt: `[Reply to "${item.title}"] ${text}` }, mockMode)
+    await API.replyToQuestion(item.id, text, mockMode)
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, reply_text: text, is_read: true } : i))
   }
 
   const filtered = filter === 'all' ? items : items.filter(i => i.type === filter)
@@ -195,6 +223,9 @@ export default function FeedPage() {
                 <CheckCheck size={14} /> Mark all read
               </Button>
             )}
+            <Button variant="ghost" size="sm" onClick={bulkClean} title="Delete all read items">
+              <Trash2 size={14} /> Clean up
+            </Button>
             <IconButton icon={RefreshCw} label="Refresh" onClick={load} className={loading ? 'animate-spin-slow' : ''} />
           </div>
         }
@@ -230,7 +261,7 @@ export default function FeedPage() {
         <div className="flex flex-col gap-3">
           <AnimatePresence mode="popLayout">
             {filtered.map(item => (
-              <FeedItem key={item.id} item={item} onMarkRead={markRead} onReply={handleReply} />
+              <FeedItem key={item.id} item={item} onMarkRead={markRead} onReply={handleReply} onDelete={deleteItem} />
             ))}
           </AnimatePresence>
         </div>

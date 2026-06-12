@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ListTodo, X, RefreshCw, Clock, Wrench, AlertCircle, CheckCircle2, CircleDot, Loader2, Ban } from 'lucide-react'
+import { ListTodo, X, RefreshCw, Clock, Wrench, AlertCircle, CheckCircle2, CircleDot, Loader2, Ban, Trash2 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { GlassPanel, Button, Badge, StatusDot, EmptyState, Spinner, SectionHeader, IconButton } from '../components/ui'
 import useStore from '../store'
@@ -123,6 +123,11 @@ export default function TasksPage() {
     setTab('queued')
   }
 
+  const bulkCleanup = async () => {
+    await API.bulkDeleteTasks('done,failed', mockMode)
+    await load()
+  }
+
   const filtered = tab === 'all' ? tasks : tasks.filter(t => t.status === tab)
 
   const counts = TABS.reduce((acc, s) => {
@@ -130,12 +135,23 @@ export default function TasksPage() {
     return acc
   }, {})
 
+  const canCleanup = tasks.some(t => ['done', 'failed'].includes(t.status))
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-6">
       <SectionHeader
         title="Task Queue"
         subtitle="All background tasks and their current status."
-        actions={<Button variant="ghost" size="sm" onClick={load}><RefreshCw size={14} /></Button>}
+        actions={
+          <div className="flex items-center gap-2">
+            {canCleanup && (
+              <Button variant="ghost" size="sm" onClick={bulkCleanup} title="Delete all done and failed tasks">
+                <Trash2 size={14} /> Clean up
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={load}><RefreshCw size={14} /></Button>
+          </div>
+        }
       />
 
       {/* Tabs */}
