@@ -58,7 +58,7 @@ function TaskRow({ task, onCancel, onRetry }) {
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {patchedStatus === 'queued'  && <IconButton icon={X}         label="Cancel" variant="danger" onClick={e => { e.stopPropagation(); onCancel(task.id) }} size={14} />}
+            {(patchedStatus === 'queued' || patchedStatus === 'running') && <IconButton icon={X} label="Cancel" variant="danger" onClick={e => { e.stopPropagation(); onCancel(task.id) }} size={14} />}
             {patchedStatus === 'failed'  && <IconButton icon={RefreshCw} label="Retry"  variant="cyan"  onClick={e => { e.stopPropagation(); onRetry(task.id) }}  size={14} />}
           </div>
         </button>
