@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ListTodo, X, RefreshCw, Clock, Wrench, AlertCircle, CheckCircle2, CircleDot, Loader2, Ban, Trash2 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
+const parseUTC = s => s ? new Date(s.endsWith('Z') || s.includes('+') ? s : s + 'Z') : null
+
 import { GlassPanel, Button, Badge, StatusDot, EmptyState, Spinner, SectionHeader, IconButton } from '../components/ui'
 import useStore from '../store'
 import * as API from '../api'
@@ -42,7 +44,7 @@ function TaskRow({ task, onCancel, onRetry }) {
               {duration && <span className="text-[10px] text-jarvis-muted">{duration}</span>}
               {task.created_at && (
                 <span className="text-[10px] text-jarvis-muted">
-                  {formatDistanceToNow(new Date(task.created_at), { addSuffix: true })}
+                  {formatDistanceToNow(parseUTC(task.created_at), { addSuffix: true })}
                 </span>
               )}
             </div>

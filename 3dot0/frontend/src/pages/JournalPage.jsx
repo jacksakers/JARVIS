@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BookOpen, Plus, Trash2, RefreshCw, Settings2, ChevronDown, ChevronUp, Eye, EyeOff, Edit3, Unlock, Search, X } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+const parseUTC = s => s ? new Date(s.endsWith('Z') || s.includes('+') ? s : s + 'Z') : null
+
 import { GlassPanel, Button, Badge, EmptyState, Spinner, SectionHeader, Textarea, Toggle } from '../components/ui'
 import useStore from '../store'
 import * as API from '../api'
@@ -124,7 +126,7 @@ function JournalEntryCard({ entry, onDelete, onChange }) {
             )}
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className="text-[10px] text-jarvis-muted">
-                {entry.created_at ? formatDistanceToNow(new Date(entry.created_at), { addSuffix: true }) : ''}
+                {entry.created_at ? formatDistanceToNow(parseUTC(entry.created_at), { addSuffix: true }) : ''}
               </span>
               {entry.updated_at && entry.updated_at !== entry.created_at && (
                 <span className="text-[10px] text-jarvis-muted/60">· edited</span>

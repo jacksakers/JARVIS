@@ -3,7 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Inbox, RefreshCw, CheckCheck, ChevronDown, ChevronUp, MessageSquare, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, parse } from 'date-fns'
+const parseUTC = s => s ? new Date(s.endsWith('Z') || s.includes('+') ? s : s + 'Z') : null
+
 import { GlassPanel, Badge, Button, EmptyState, Spinner, SectionHeader, IconButton } from '../components/ui'
 import useStore from '../store'
 import * as API from '../api'
@@ -48,7 +50,7 @@ function FeedItem({ item, onMarkRead, onReply, onDelete }) {
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <Badge type={item.type}>{item.type.replace('_', ' ')}</Badge>
               <span className="text-[11px] text-jarvis-muted font-mono">
-                {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
+                {formatDistanceToNow(parseUTC(item.created_at), { addSuffix: true })}
               </span>
             </div>
             <p className={clsx('text-sm font-medium leading-snug', item.is_read ? 'text-jarvis-muted' : 'text-jarvis-text')}>

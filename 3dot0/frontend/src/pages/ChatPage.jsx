@@ -7,6 +7,8 @@ import {
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { formatDistanceToNow } from 'date-fns'
+
+const parseUTC = s => s ? new Date(s.endsWith('Z') || s.includes('+') ? s : s + 'Z') : null
 import { Button, EmptyState, Spinner } from '../components/ui'
 import useStore from '../store'
 import * as API from '../api'
@@ -111,7 +113,7 @@ function Message({ msg }) {
           )}
         </div>
         <span className="text-[10px] text-jarvis-muted/60 px-1">
-          {msg.created_at ? formatDistanceToNow(new Date(msg.created_at), { addSuffix: true }) : ''}
+          {msg.created_at ? formatDistanceToNow(parseUTC(msg.created_at), { addSuffix: true }) : ''}
         </span>
       </div>
     </motion.div>
