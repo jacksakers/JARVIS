@@ -142,6 +142,7 @@ class BackgroundWorker:
             task_system_override = task.system_prompt_override
             task_conversation_id = task.conversation_id
             task_conv_state = task.conversation_state
+            task_gen_config = task.routine_generation_config
 
         manager.broadcast_from_thread(
             "task_started",
@@ -150,20 +151,24 @@ class BackgroundWorker:
         logger.info("Processing task %d: %s…", task_id, task_prompt[:60])
 
         try:
-            result_md, memory = self._run_agent(
-                task_id=task_id,
-                prompt=task_prompt,
-                routine_id=task_routine_id,
-                system_prompt_override=task_system_override,
-                saved_state=task_conv_state,
-            )
-            self._save_result(
-                task_id=task_id,
-                user_id=task_user_id,
-                routine_id=task_routine_id,
-                conversation_id=task_conversation_id,
-                content_markdown=result_md or "",
-            )
+            # Check if this is a routine generation task
+            if task_gen_config:
+                self._process_routine_generation(task_id, task_user_id, task_gen_config)
+            else:
+                result_md, memory = self._run_agent(
+                    task_id=task_id,
+                    prompt=task_prompt,
+                    routine_id=task_routine_id,
+                    system_prompt_override=task_system_override,
+                    saved_state=task_conv_state,
+                )
+                self._save_result(
+                    task_id=task_id,
+                    user_id=task_user_id,
+                    routine_id=task_routine_id,
+                    conversation_id=task_conversation_id,
+                    content_markdown=result_md or "",
+                )
         except UserInputRequired as exc:
             self._mark_waiting(task_id, exc.feed_item_id, exc.memory)
         except Exception as exc:
@@ -233,6 +238,124 @@ class BackgroundWorker:
 
         result = agent.run_turn(prompt, allowed_skill_names=allowed_skills)
         return result, memory
+
+    def _process_routine_generation(
+        self,
+        task_id: int,
+        user_id: int,
+        generation_config: str,
+    ) -> None:
+        """Generate a routine via LLM and save it to the database."""
+        try:
+            gen_config_dict = json.loads(generation_config)
+        except json.JSONDecodeError:
+            self._mark_failed(task_id, "Invalid routine generation config JSON")
+            return
+
+        description = gen_config_dict.get("description", "").strip()
+        if not description:
+            self._mark_failed(task_id, "No description provided for routine generation")
+            return
+
+        # Build skill list context
+        skill_names = list(self._registry.tools.keys())
+        skill_descs = "\n".join(
+            f"- {name}: {cls.description[:120]}"
+            for name, cls in self._registry.tools.items()
+        )
+
+        system_prompt = (
+            "You are a JARVIS routine generator. Output ONLY a JSON object that matches this schema:\n"
+            "{\n"
+            '  "name": "string",\n'
+            '  "description": "string",\n'
+            '  "trigger_type": "cron" | "manual",\n'
+            '  "trigger_value": "cron expression if cron, else empty string",\n'
+            '  "system_prompt": "detailed instructions for JARVIS when this routine runs",\n'
+            '  "allowed_skill_names": ["array", "of", "skill", "names"],\n'
+            '  "active": true\n'
+            "}\n\n"
+            f"Available skills (only pick from this list):\n{skill_descs}\n\n"
+            "Rules:\n"
+            "- system_prompt must be detailed and tell JARVIS exactly what to do, in what order, and how to format the output.\n"
+            "- Only include skills that are actually needed for this routine.\n"
+            "- For cron triggers use standard 5-field cron (e.g. '0 8 * * 1-5' = 8 AM weekdays). These times MUST be in UTC.\n"
+            "- Output ONLY valid JSON, no markdown fences, no explanation."
+        )
+
+        user_prompt = f"Generate a JARVIS routine for: {description}"
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        content = ""
+        try:
+            for chunk in self._llm.stream(messages, tools=None):
+                if chunk.content:
+                    content += chunk.content
+        except Exception as exc:
+            logger.exception("Routine generation LLM call failed for task %d", task_id)
+            self._mark_failed(task_id, f"LLM error: {str(exc)[:200]}")
+            return
+
+        # Strip markdown fences if model wraps it anyway
+        content = content.strip()
+        if content.startswith("```"):
+            lines = content.splitlines()
+            content = "\n".join(lines[1:-1]) if len(lines) > 1 and lines[-1].startswith("```") else "\n".join(lines[1:])
+
+        try:
+            result = json.loads(content)
+        except json.JSONDecodeError:
+            logger.error("Routine generation LLM returned invalid JSON for task %d: %s", task_id, content[:300])
+            self._mark_failed(task_id, f"LLM returned invalid JSON")
+            return
+
+        # Validate and sanitize the result
+        routine_data = {
+            "name": result.get("name", "Unnamed Routine").strip()[:255],
+            "description": result.get("description", "").strip()[:255],
+            "trigger_type": result.get("trigger_type", "manual"),
+            "trigger_value": result.get("trigger_value", "").strip(),
+            "system_prompt": result.get("system_prompt", "").strip(),
+            "allowed_skill_names": json.dumps(
+                [s for s in result.get("allowed_skill_names", []) if s in skill_names]
+            ),
+            "active": result.get("active", True),
+        }
+
+        # Validate required fields
+        if not routine_data["name"]:
+            self._mark_failed(task_id, "Generated routine has no name")
+            return
+
+        # Save the routine to the database
+        try:
+            with session_scope() as session:
+                from app.models import Routine
+                routine = Routine(user_id=user_id, **routine_data)
+                session.add(routine)
+                session.flush()
+                routine_id = routine.id
+                
+                # Mark task as done
+                task = session.get(Task, task_id)
+                if task:
+                    task.status = TaskStatus.done
+                    task.completed_at = datetime.now(timezone.utc)
+                    session.add(task)
+                session.commit()
+
+            logger.info("Generated routine %d from task %d: %s", routine_id, task_id, routine_data["name"])
+            manager.broadcast_from_thread(
+                "task_done",
+                {"task_id": task_id, "routine_id": routine_id, "routine_name": routine_data["name"]},
+            )
+        except Exception as exc:
+            logger.exception("Failed to save generated routine for task %d", task_id)
+            self._mark_failed(task_id, f"Database error: {str(exc)[:200]}")
 
     def _save_result(
         self,

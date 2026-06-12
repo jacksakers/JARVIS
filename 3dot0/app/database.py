@@ -59,6 +59,8 @@ def _run_migrations() -> None:
             # Task: conversation state & chat conversation link
             ("tasks",           "conversation_state",    "ALTER TABLE tasks ADD COLUMN conversation_state TEXT DEFAULT NULL"),
             ("tasks",           "conversation_id",       "ALTER TABLE tasks ADD COLUMN conversation_id INTEGER DEFAULT NULL"),
+            # Task: routine generation config
+            ("tasks",           "routine_generation_config", "ALTER TABLE tasks ADD COLUMN routine_generation_config TEXT DEFAULT NULL"),
             # Feed item: store user reply
             ("feed_items",      "reply_text",   "ALTER TABLE feed_items ADD COLUMN reply_text TEXT DEFAULT NULL"),
             # User: auth & bio

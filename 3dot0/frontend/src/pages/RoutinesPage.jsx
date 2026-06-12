@@ -460,6 +460,8 @@ export default function RoutinesPage() {
   const [genPrompt,   setGenPrompt]   = useState('')
   const [generating,  setGenerating]  = useState(false)
   const [genError,    setGenError]    = useState('')
+  const [genTaskId,   setGenTaskId]   = useState(null)
+  const [genTaskStatus, setGenTaskStatus] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -501,27 +503,54 @@ export default function RoutinesPage() {
     setGenError('')
     try {
       const result = await API.generateRoutine(genPrompt.trim(), mockMode)
-      setShowGenerate(false)
-      setGenPrompt('')
-      // Pre-populate the editor with the generated values
-      // Convert UTC cron to Eastern time for display
-      const easternCron = result.trigger_value ? cronUTCToEastern(result.trigger_value) : '0 9 * * *'
-      setEditing({
-        id: null,
-        name: result.name ?? '',
-        description: result.description ?? '',
-        trigger_type: result.trigger_type ?? 'manual',
-        trigger_value: easternCron,
-        system_prompt: result.system_prompt ?? '',
-        allowed_skill_names: result.allowed_skill_names ?? [],
-        active: result.active ?? true,
-      })
+      // result now contains {task_id, status}
+      if (result.task_id) {
+        setGenTaskId(result.task_id)
+        setGenTaskStatus('queued')
+        setShowGenerate(false)
+        setGenPrompt('')
+      }
     } catch (err) {
       setGenError(err.message || 'Generation failed. Check the backend logs.')
-    } finally {
       setGenerating(false)
     }
   }
+
+  // Poll for routine generation task completion
+  useEffect(() => {
+    if (!genTaskId) return
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const tasks = await API.getTasks({ limit: 100 }, mockMode)
+        const task = tasks.find(t => t.id === genTaskId)
+        
+        if (task) {
+          setGenTaskStatus(task.status)
+          if (task.status === 'done') {
+            // Refresh routines list
+            const routinesData = await API.getRoutines(mockMode)
+            setRoutines(routinesData)
+            // Clear generation state
+            setGenTaskId(null)
+            setGenTaskStatus(null)
+            setGenerating(false)
+            clearInterval(pollInterval)
+          } else if (task.status === 'failed') {
+            setGenError(`Generation failed: ${task.error_message || 'Unknown error'}`)
+            setGenTaskId(null)
+            setGenTaskStatus(null)
+            setGenerating(false)
+            clearInterval(pollInterval)
+          }
+        }
+      } catch (err) {
+        console.error('Error polling task status:', err)
+      }
+    }, 1000) // Poll every 1 second
+    
+    return () => clearInterval(pollInterval)
+  }, [genTaskId, mockMode])
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6">
@@ -599,46 +628,79 @@ export default function RoutinesPage() {
 
       {/* Generate with AI modal */}
       <Modal
-        open={showGenerate}
-        onClose={() => { setShowGenerate(false); setGenPrompt(''); setGenError('') }}
+        open={showGenerate || !!genTaskId}
+        onClose={() => { 
+          if (!generating && !genTaskId) {
+            setShowGenerate(false)
+            setGenPrompt('')
+            setGenError('')
+          }
+        }}
         title="Generate Routine with AI"
         size="md"
       >
-        <div className="space-y-4">
-          <p className="text-xs text-jarvis-muted">
-            Describe what you want JARVIS to do automatically. The AI will generate a complete routine
-            configuration — you can review and edit it before saving.
-          </p>
-          <div>
-            <label className="text-xs text-jarvis-muted block mb-1.5">Describe your routine</label>
-            <Textarea
-              value={genPrompt}
-              onChange={e => setGenPrompt(e.target.value)}
-              placeholder="e.g. Every morning at 8am, check the weather and send me a summary with what to wear. Also check if any urgent tasks are due today."
-              className="min-h-[100px]"
-              disabled={generating}
-            />
+        {genTaskId ? (
+          // Polling state
+          <div className="space-y-4 p-4">
+            <div className="flex flex-col items-center gap-3">
+              <Spinner size={24} />
+              <p className="text-sm font-medium text-jarvis-text">Generating routine…</p>
+              <p className="text-xs text-jarvis-muted">Status: {genTaskStatus}</p>
+            </div>
+            {genError && <p className="text-xs text-red-400 text-center">{genError}</p>}
+            {!genError && (
+              <p className="text-[10px] text-jarvis-muted text-center">
+                JARVIS is thinking… this may take 10–30 seconds depending on the model.
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { 
+                setShowGenerate(false)
+                setGenTaskId(null)
+                setGenError('')
+              }} disabled={genTaskStatus !== 'failed'}>
+                {genError ? 'Close' : 'Cancel'}
+              </Button>
+            </div>
           </div>
-          {genError && <p className="text-xs text-red-400">{genError}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => { setShowGenerate(false); setGenPrompt('') }}>
-              Cancel
-            </Button>
-            <Button
-              variant="solid"
-              size="sm"
-              onClick={generateRoutine}
-              disabled={!genPrompt.trim() || generating}
-            >
-              {generating ? <><Spinner size={12} /> Generating…</> : <><Sparkles size={13} /> Generate</>}
-            </Button>
-          </div>
-          {generating && (
-            <p className="text-[10px] text-jarvis-muted text-center">
-              Calling JARVIS… this may take 10–30 seconds depending on the model.
+        ) : (
+          // Form state
+          <div className="space-y-4">
+            <p className="text-xs text-jarvis-muted">
+              Describe what you want JARVIS to do automatically. The AI will generate a complete routine
+              configuration that you can review before saving.
             </p>
-          )}
-        </div>
+            <div>
+              <label className="text-xs text-jarvis-muted block mb-1.5">Describe your routine</label>
+              <Textarea
+                value={genPrompt}
+                onChange={e => setGenPrompt(e.target.value)}
+                placeholder="e.g. Every morning at 8am, check the weather and send me a summary with what to wear. Also check if any urgent tasks are due today."
+                className="min-h-[100px]"
+                disabled={generating}
+              />
+            </div>
+            {genError && <p className="text-xs text-red-400">{genError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { setShowGenerate(false); setGenPrompt('') }}>
+                Cancel
+              </Button>
+              <Button
+                variant="solid"
+                size="sm"
+                onClick={generateRoutine}
+                disabled={!genPrompt.trim() || generating}
+              >
+                {generating ? <><Spinner size={12} /> Generating…</> : <><Sparkles size={13} /> Generate</>}
+              </Button>
+            </div>
+            {generating && (
+              <p className="text-[10px] text-jarvis-muted text-center">
+                Calling JARVIS… this may take 10–30 seconds depending on the model.
+              </p>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   )

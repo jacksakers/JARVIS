@@ -140,6 +140,51 @@ export const runRoutine    = async (id) => {
   return submitTask({ prompt: `[Manual run: ${r?.name ?? 'Routine'}] Execute this routine now and produce a complete report.`, routine_id: id })
 }
 
+export const generateRoutine = async (description) => {
+  await delay(100)
+  // Create a task that will simulate routine generation
+  const task = { 
+    id: nextId(), 
+    user_id: 1, 
+    routine_id: null, 
+    prompt: `Generate a routine: ${description}`,
+    status: 'queued', 
+    error_message: null, 
+    created_at: new Date().toISOString(), 
+    started_at: null, 
+    completed_at: null 
+  }
+  _tasks.unshift(task)
+  
+  // Simulate routine generation (completes after a delay)
+  setTimeout(() => {
+    task.status = 'running'
+    task.started_at = new Date().toISOString()
+  }, 500)
+  
+  setTimeout(() => {
+    // Create a mock generated routine
+    const generated = {
+      id: nextId(),
+      user_id: 1,
+      name: 'Generated: ' + description.substring(0, 30),
+      description: description,
+      trigger_type: 'manual',
+      trigger_value: '',
+      system_prompt: 'You are a helpful assistant.',
+      allowed_skill_names: '[]',
+      active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    _routines.push(generated)
+    task.status = 'done'
+    task.completed_at = new Date().toISOString()
+  }, 2000)
+  
+  return { task_id: task.id, status: 'queued' }
+}
+
 export const createJournal = async (payload) => {
   await delay(150)
   const entry = { id: nextId(), user_id: 1, processed: false, created_at: new Date().toISOString(), ...payload }

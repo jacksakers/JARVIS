@@ -111,7 +111,7 @@ export const sendConversationMessage = (id, content, mock) =>
 // ── Routines generate ─────────────────────────────────────────────────────
 
 export const generateRoutine = (description, mock) =>
-  post('/api/v1/routines/generate', { description }, mock, () => null)
+  post('/api/v1/routines/generate', { description }, mock, () => Mock.generateRoutine(description))
 
 // ── Health ────────────────────────────────────────────────────────────────
 

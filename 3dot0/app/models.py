@@ -162,6 +162,9 @@ class Task(SQLModel, table=True):
     conversation_state: Optional[str] = Field(default=None)
     # Chat conversation this task belongs to (optional)
     conversation_id: Optional[int] = Field(default=None, foreign_key="conversations.id")
+    # JSON-serialised routine generation config (if this is a routine generation task)
+    # Format: {"description": "user description"}
+    routine_generation_config: Optional[str] = Field(default=None)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Field(default=None)
