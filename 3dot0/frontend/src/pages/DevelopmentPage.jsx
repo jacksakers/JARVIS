@@ -149,53 +149,41 @@ export default function DevelopmentPage() {
     Promise.all([
       API.getDevProjects(mockMode).catch(() => []),
       API.getDevPRs(mockMode).catch(() => []),
-    ]).then(([projs, prList]) => {
+      API.getDevActiveTask(mockMode).catch(() => ({ task: null, pr: null })),
+    ]).then(([projs, prList, active]) => {
       setProjects(projs)
       setPRs(prList)
 
-      // Restore persisted state
-      if (devTaskState) {
-        const { taskId, projectName, taskStatus: savedStatus, prId } = devTaskState
+      if (active.pr) {
+        // A pending PR exists — go straight to review
+        const proj = projs.find(p => p.name === active.pr.project_name)
+        if (proj) setSelectedProject(proj)
+        loadAndShowPR(active.pr.id)
+        return
+      }
+
+      if (active.task) {
+        const { id: taskId, status: taskSt, project_name: projectName } = active.task
         const proj = projs.find(p => p.name === projectName)
-
-        if (prId) {
-          // PR was created — go straight to review
-          const pr = prList.find(p => p.id === prId)
-          if (pr && pr.status === 'pending') {
-            if (proj) setSelectedProject(proj)
-            loadAndShowPR(prId)
-            return
-          }
+        if (proj) {
+          setSelectedProject(proj)
+          setActiveTaskId(taskId)
+          setTaskStatus(taskSt)
+          setTaskEvents([{ type: 'status', message: `Task #${taskId} is ${taskSt} — waiting for updates…` }])
+          setView('workspace')
+          // Persist so WS events reconnect correctly
+          setDevTaskState({ taskId, projectName, taskStatus: taskSt, prId: null })
+          return
         }
+      }
 
-        if (savedStatus === 'queued' || savedStatus === 'running') {
-          // Task still in progress — check actual status from server
-          API.getTasks({ status: savedStatus }, mockMode).then(tasks => {
-            const t = tasks.find(t => t.id === taskId)
-            if (t && (t.status === 'queued' || t.status === 'running')) {
-              if (proj) {
-                setSelectedProject(proj)
-                setActiveTaskId(taskId)
-                setTaskStatus(t.status)
-                setTaskEvents([{ type: 'status', message: `Resuming task #${taskId} (${t.status})…` }])
-                setView('workspace')
-              }
-            } else {
-              // Task finished while we were away — check for PR
-              const pending = prList.find(p => p.project_name === projectName && p.status === 'pending')
-              if (pending) {
-                if (proj) setSelectedProject(proj)
-                loadAndShowPR(pending.id)
-              }
-            }
-          }).catch(() => {})
-        } else if (savedStatus === 'done') {
-          // Check if a PR was generated
-          const pending = prList.find(p => p.project_name === projectName && p.status === 'pending')
-          if (pending) {
-            if (proj) setSelectedProject(proj)
-            loadAndShowPR(pending.id)
-          }
+      // No active task — check persisted state as fallback
+      if (devTaskState?.prId) {
+        const pr = prList.find(p => p.id === devTaskState.prId && p.status === 'pending')
+        if (pr) {
+          const proj = projs.find(p => p.name === devTaskState.projectName)
+          if (proj) setSelectedProject(proj)
+          loadAndShowPR(pr.id)
         }
       }
     }).finally(() => setLoadingProjects(false))

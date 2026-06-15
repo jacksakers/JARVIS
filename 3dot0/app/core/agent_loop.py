@@ -173,7 +173,7 @@ class AgentLoop:
         self.memory.close_turn()
         return final_content or content or "Iteration limit reached."
 
-    # ── Streaming ────────────────────────────────────────────────────────────
+    # ── LLM call ─────────────────────────────────────────────────────────────
 
     def _stream_response(
         self,
@@ -181,32 +181,39 @@ class AgentLoop:
         tools: Optional[list],
     ):
         """
-        Stream the LLM response.
-        Returns (content: str, tool_calls: list[ToolCall] | None).
+        Call the LLM and return (content: str, tool_calls: list[ToolCall] | None).
+
+        When tools are provided we use the non-streaming API — streaming is
+        unreliable for tool extraction because many models (including Gemma)
+        only populate tool_calls on the final chunk, and quantised models
+        sometimes write tool invocations as plain text in content instead.
+
+        When no tools are provided (final answer turn) we stream so the user
+        can see progress via WebSocket events.
         """
-        content = ""
-        tool_calls: Optional[List[ToolCall]] = None
-
-        try:
-            for chunk in self.llm.stream(messages, tools=tools):
-                if self.stop_event.is_set():
-                    break
-
-                if chunk.content:
-                    content += chunk.content
-                    # self.on_event("content_chunk", {"chunk": chunk.content})
-
-                # Accumulate tool calls — a single chunk may carry multiple
+        if tools:
+            # Non-streaming: reliable tool-call extraction
+            try:
+                chunk = self.llm.chat(messages, tools=tools)
                 if chunk.tool_calls:
-                    if tool_calls is None:
-                        tool_calls = []
-                    tool_calls.extend(chunk.tool_calls)
-
-        except Exception as exc:
-            self.on_event("error", {"message": str(exc)})
+                    for tc in chunk.tool_calls:
+                        self.on_event("tool_call", {"name": tc.name, "arguments": tc.arguments})
+                return chunk.content, chunk.tool_calls or None
+            except Exception as exc:
+                self.on_event("error", {"message": str(exc)})
+                return "", None
+        else:
+            # Streaming: show content progress for final text answer
+            content = ""
+            try:
+                for chunk in self.llm.stream(messages, tools=None):
+                    if self.stop_event.is_set():
+                        break
+                    if chunk.content:
+                        content += chunk.content
+            except Exception as exc:
+                self.on_event("error", {"message": str(exc)})
             return content, None
-
-        return content, tool_calls
 
     # ── Tool execution ────────────────────────────────────────────────────────
 

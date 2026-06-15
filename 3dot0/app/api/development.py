@@ -104,6 +104,70 @@ _DEV_SYSTEM_PROMPT = (
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@router.get("/active-task")
+def get_active_dev_task(session: Session = Depends(get_session)):
+    """
+    Return the most recent queued/running dev task, plus any pending PR for
+    the same project. Used by the frontend to restore state after navigation.
+    """
+    from sqlmodel import or_
+    task = session.exec(
+        select(Task)
+        .where(
+            Task.allowed_skill_names_override.is_not(None),
+            or_(Task.status == TaskStatus.queued, Task.status == TaskStatus.running),
+        )
+        .order_by(Task.created_at.desc())
+        .limit(1)
+    ).first()
+
+    result: dict = {"task": None, "pr": None}
+
+    if task:
+        import json as _json
+        try:
+            skill_names = _json.loads(task.allowed_skill_names_override or "[]")
+            if "dev_list_repos" not in skill_names:
+                task = None
+        except Exception:
+            task = None
+
+    if task:
+        result["task"] = {
+            "id": task.id,
+            "status": task.status,
+            "prompt": task.prompt[:200],
+            "created_at": task.created_at.isoformat(),
+        }
+        # Extract project name from prompt (format: "Repository: <name>\n\n...")
+        project_name = None
+        for line in task.prompt.splitlines():
+            if line.startswith("Repository:"):
+                project_name = line.split(":", 1)[1].strip()
+                break
+        if project_name:
+            result["task"]["project_name"] = project_name
+            pr = session.exec(
+                select(DevPullRequest)
+                .where(
+                    DevPullRequest.project_name == project_name,
+                    DevPullRequest.status == "pending",
+                )
+                .order_by(DevPullRequest.created_at.desc())
+                .limit(1)
+            ).first()
+            if pr:
+                result["pr"] = {
+                    "id": pr.id,
+                    "project_name": pr.project_name,
+                    "branch_name": pr.branch_name,
+                    "status": pr.status,
+                    "commit_message": pr.commit_message,
+                }
+
+    return result
+
+
 @router.get("/projects")
 def list_projects():
     """Return all Git repositories inside the development root."""

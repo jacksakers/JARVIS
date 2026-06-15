@@ -123,6 +123,7 @@ export const getHealth = () => get('/health', false, () => ({ status: 'ok' }))
 // ── Development ───────────────────────────────────────────────────────────
 
 export const getDevProjects     = (mock)           => get('/api/v1/dev/projects', mock, () => [])
+export const getDevActiveTask   = (mock)           => get('/api/v1/dev/active-task', mock, () => ({ task: null, pr: null }))
 export const getDevProjectTree  = (name, path, mock) => get(`/api/v1/dev/projects/${encodeURIComponent(name)}/tree?path=${encodeURIComponent(path || '.')}`, mock, () => ({ tree: '' }))
 export const getDevPRs          = (mock)           => get('/api/v1/dev/prs', mock, () => [])
 export const getDevPR           = (id, mock)       => get(`/api/v1/dev/prs/${id}`, mock, () => null)

@@ -74,6 +74,22 @@ def _run_migrations() -> None:
             if not _column_exists(table, column):
                 cursor.execute(sql)
 
+        # Create dev_pull_requests table if it doesn't exist
+        # (SQLModel.create_all handles new installs; this covers existing DBs)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dev_pull_requests (
+                id INTEGER PRIMARY KEY,
+                project_name TEXT NOT NULL,
+                branch_name TEXT NOT NULL,
+                task_id INTEGER,
+                status TEXT NOT NULL DEFAULT 'pending',
+                commit_message TEXT NOT NULL DEFAULT '',
+                diff TEXT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
     finally:
         conn.close()

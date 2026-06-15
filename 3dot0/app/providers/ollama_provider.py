@@ -45,6 +45,47 @@ class OllamaProvider(BaseLLM):
         except Exception as exc:
             yield f"\n[Connection error: {exc}]"
 
+    def chat(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[dict]] = None,
+    ) -> "StreamChunk":
+        """
+        Non-streaming single call. Used for tool-calling iterations where
+        streaming is unreliable (tool_calls only appear in the final chunk
+        for many models, and some models write tool calls as text instead).
+        """
+        from app.core.llm_provider import StreamChunk, ToolCall as TC
+        kwargs: dict = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": self.options,
+        }
+        if tools:
+            kwargs["tools"] = tools
+
+        try:
+            response = self._client.chat(**kwargs)
+            tool_calls = None
+            if response.message.tool_calls:
+                tool_calls = [
+                    TC(
+                        name=tc.function.name,
+                        arguments=tc.function.arguments,
+                    )
+                    for tc in response.message.tool_calls
+                ]
+            return StreamChunk(
+                content=response.message.content or "",
+                tool_calls=tool_calls,
+                done=True,
+            )
+        except _sdk.ResponseError as exc:
+            return StreamChunk(content=f"\n[Ollama error: {exc.error}]", done=True)
+        except Exception as exc:
+            return StreamChunk(content=f"\n[Connection error: {exc}]", done=True)
+
     def stream(
         self,
         messages: List[Dict[str, Any]],

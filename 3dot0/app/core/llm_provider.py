@@ -46,6 +46,25 @@ class BaseLLM(ABC):
         multiple entries — callers must handle parallel tool calls.
         """
 
+    def chat(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[dict]] = None,
+    ) -> StreamChunk:
+        """
+        Non-streaming single-shot chat with optional tool support.
+        Returns a single StreamChunk with the complete content and/or tool_calls.
+        Default implementation collects the stream — providers should override
+        for a direct non-streaming API call when available.
+        """
+        content = ""
+        tool_calls: Optional[List[ToolCall]] = None
+        for chunk in self.stream(messages, tools):
+            content += chunk.content
+            if chunk.tool_calls:
+                tool_calls = (tool_calls or []) + chunk.tool_calls
+        return StreamChunk(content=content, tool_calls=tool_calls, done=True)
+
     @abstractmethod
     def test_connection(self) -> bool:
         """Return True if the provider is reachable and the model is available."""
