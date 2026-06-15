@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import the skills you want to test here
 from app.skills.web_skills import WebSearchSkill, ReadWebpageSkill
+from app.skills.memory_skills import SearchMemorySkill
 
 def run_interactive_tester(skill_instance):
     print(f"\n" + "="*50)
@@ -20,7 +21,7 @@ def run_interactive_tester(skill_instance):
     
     # Show what the LLM sees
     print("\n[Schema presented to LLM]:")
-    # print(json.dumps(skill_instance.get_ollama_tool_schema(), indent=2))
+    print(json.dumps(skill_instance.get_ollama_tool_schema(), indent=2))
     print("-" * 50)
 
     while True:
@@ -55,6 +56,6 @@ def run_interactive_tester(skill_instance):
 if __name__ == "__main__":
     # You can swap this out for any skill you want to test!
     # Example: skill_to_test = SaveMemorySkill()
-    skill_to_test = ReadWebpageSkill()
+    skill_to_test = SearchMemorySkill()
     
     run_interactive_tester(skill_to_test)
