@@ -270,7 +270,8 @@ class DevSearchCodebase(BaseSkill):
     name = "dev_search_codebase"
     description = (
         "Search for a text string across all files in a repository (case-insensitive). "
-        "Returns file paths and matching line snippets. "
+        "Returns exact phrase matches first, then related keyword matches for any individual "
+        "word in the query (words shorter than 3 characters are ignored as keywords). "
         "Use this to find where specific functionality, classes, or variables live."
     )
     input_model = DevSearchCodebaseInput
@@ -281,9 +282,14 @@ class DevSearchCodebase(BaseSkill):
         except ValueError as e:
             return f"Error: {e}"
 
-        results = []
         query_lower = params.query.lower()
+        keywords = [w for w in query_lower.split() if len(w) >= 3]
         suffix_filter = params.file_pattern.lstrip("*") if params.file_pattern != "*" else None
+
+        exact_results: list[str] = []
+        keyword_results: list[str] = []
+        # Track (file, lineno) pairs already captured as exact matches
+        exact_seen: set[tuple[str, int]] = set()
 
         for root, dirs, files in os.walk(repo_root):
             dirs[:] = [d for d in dirs if d not in _IGNORE_DIRS and not d.startswith(".")]
@@ -295,19 +301,31 @@ class DevSearchCodebase(BaseSkill):
                     text = fpath.read_text(encoding="utf-8", errors="ignore")
                 except Exception:
                     continue
+                rel = str(fpath.relative_to(repo_root))
                 for lineno, line in enumerate(text.splitlines(), 1):
-                    if query_lower in line.lower():
-                        rel = str(fpath.relative_to(repo_root))
-                        results.append(f"{rel}:{lineno}: {line.strip()[:120]}")
-                if len(results) >= 50:
-                    break
-            if len(results) >= 50:
+                    line_lower = line.lower()
+                    if query_lower in line_lower:
+                        exact_seen.add((rel, lineno))
+                        if len(exact_results) < 50:
+                            exact_results.append(f"  {rel}:{lineno}: {line.strip()[:120]}")
+                    elif keywords and (rel, lineno) not in exact_seen:
+                        if any(kw in line_lower for kw in keywords):
+                            if len(keyword_results) < 30:
+                                keyword_results.append(f"  {rel}:{lineno}: {line.strip()[:120]}")
+
+            if len(exact_results) >= 50 and len(keyword_results) >= 30:
                 break
 
-        if not results:
+        if not exact_results and not keyword_results:
             return f"No matches for '{params.query}' in {params.repo_name}."
-        header = f"Found {len(results)} match(es) for '{params.query}' in {params.repo_name}:"
-        return header + "\n" + "\n".join(results)
+
+        parts: list[str] = []
+        if exact_results:
+            parts.append(f"Exact matches ({len(exact_results)}):\n" + "\n".join(exact_results))
+        if keyword_results:
+            parts.append(f"Related keyword matches ({len(keyword_results)}):\n" + "\n".join(keyword_results))
+
+        return f"Search results for '{params.query}' in {params.repo_name}:\n\n" + "\n\n".join(parts)
 
 
 class DevCreateBranch(BaseSkill):
