@@ -419,7 +419,10 @@ class DevWriteFile(BaseSkill):
         "Write the complete content of a file (creates new or overwrites existing). "
         "This is the primary way to modify files: read the file first with dev_read_file, "
         "then call this with the full updated content. "
-        "Always supply the entire file — never partial content."
+        "Always supply the entire file — never partial content. "
+        "IMPORTANT: do NOT include line numbers in the content. "
+        "dev_read_file displays lines as '   42 | code here' for reference only — "
+        "strip the line-number prefix before writing."
     )
     input_model = DevWriteFileInput
 
@@ -429,14 +432,22 @@ class DevWriteFile(BaseSkill):
         except ValueError as e:
             return f"Error: {e}"
 
+        import re as _re
+        _line_num_prefix = _re.compile(r"^\s*\d+\s\|\s?")
+        cleaned_lines = [
+            _line_num_prefix.sub("", line) if _line_num_prefix.match(line) else line
+            for line in params.content.splitlines(keepends=True)
+        ]
+        content = "".join(cleaned_lines)
+
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
-            full_path.write_text(params.content, encoding="utf-8")
+            full_path.write_text(content, encoding="utf-8")
         except Exception as e:
             return f"Error writing file: {e}"
 
         action = "Created" if not full_path.exists() else "Wrote"
-        return f"{action} '{params.repo_name}/{params.file_path}' ({len(params.content.splitlines())} lines)."
+        return f"{action} '{params.repo_name}/{params.file_path}' ({len(content.splitlines())} lines)."
 
 
 class DevCommitPR(BaseSkill):
