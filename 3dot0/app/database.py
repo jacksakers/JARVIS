@@ -66,6 +66,8 @@ def _run_migrations() -> None:
             # User: auth & bio
             ("users",           "password_hash", "ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL"),
             ("users",           "bio",           "ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''"),
+            # Task: per-task tool allowlist (for chat tool-selection feature)
+            ("tasks", "allowed_skill_names_override", "ALTER TABLE tasks ADD COLUMN allowed_skill_names_override TEXT DEFAULT NULL"),
         ]
 
         for table, column, sql in migrations:

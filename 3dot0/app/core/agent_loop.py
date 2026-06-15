@@ -124,7 +124,17 @@ class AgentLoop:
 
             # ── Parallel tool execution ───────────────────────────────────
             assistant_msg = _build_assistant_tool_msg(content, tool_calls)
-            tool_results = self._execute_tool_calls(tool_calls)
+            try:
+                tool_results = self._execute_tool_calls(tool_calls)
+            except UserInputRequired as exc:
+                # Persist the pending tool call and a placeholder result to memory
+                # so that when the task resumes the LLM has full context of the exchange.
+                self.memory.append_tool_turn(
+                    assistant_msg,
+                    [{"role": "tool", "content": "[Awaiting your response]", "name": "ask_user"}],
+                )
+                self.memory.close_turn()
+                raise
 
             if self.stop_event.is_set():
                 self.memory.close_turn()

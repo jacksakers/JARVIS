@@ -105,14 +105,28 @@ export const createConversation = (payload, mock)  => post('/api/v1/conversation
 export const updateConversation = (id, data, mock) => patch(`/api/v1/conversations/${id}`, data, mock, () => null)
 export const deleteConversation = (id, mock)       => del(`/api/v1/conversations/${id}`, mock, () => null)
 export const getConversationMessages = (id, mock)  => get(`/api/v1/conversations/${id}/messages`, mock, () => [])
-export const sendConversationMessage = (id, content, mock) =>
-  post(`/api/v1/conversations/${id}/messages`, { content }, mock, () => null)
+export const sendConversationMessage = (id, content, allowedSkills, mock) =>
+  post(`/api/v1/conversations/${id}/messages`, {
+    content,
+    ...(allowedSkills !== undefined ? { allowed_skill_names: allowedSkills } : {}),
+  }, mock, () => null)
 
 // ── Routines generate ─────────────────────────────────────────────────────
 
 export const generateRoutine = (description, mock) =>
-  post('/api/v1/routines/generate', { description }, mock, () => Mock.generateRoutine(description))
+  post('/api/v1/routines/generate', { description }, mock, () => null)
 
 // ── Health ────────────────────────────────────────────────────────────────
 
 export const getHealth = () => get('/health', false, () => ({ status: 'ok' }))
+
+// ── Development ───────────────────────────────────────────────────────────
+
+export const getDevProjects     = (mock)           => get('/api/v1/dev/projects', mock, () => [])
+export const getDevProjectTree  = (name, path, mock) => get(`/api/v1/dev/projects/${encodeURIComponent(name)}/tree?path=${encodeURIComponent(path || '.')}`, mock, () => ({ tree: '' }))
+export const getDevPRs          = (mock)           => get('/api/v1/dev/prs', mock, () => [])
+export const getDevPR           = (id, mock)       => get(`/api/v1/dev/prs/${id}`, mock, () => null)
+export const mergeDevPR         = (id, mock)       => post(`/api/v1/dev/prs/${id}/merge`, null, mock, () => null)
+export const discardDevPR       = (id, mock)       => post(`/api/v1/dev/prs/${id}/discard`, null, mock, () => null)
+export const requestDevChanges  = (id, feedback, mock) => post(`/api/v1/dev/prs/${id}/request-changes`, { feedback }, mock, () => null)
+export const createDevTask      = (project_name, description, mock) => post('/api/v1/dev/task', { project_name, description }, mock, () => null)

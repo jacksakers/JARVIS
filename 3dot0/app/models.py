@@ -25,6 +25,12 @@ class TaskStatus(str, Enum):
     waiting = "waiting"  # Paused — waiting for user reply to a question
 
 
+class DevPRStatus(str, Enum):
+    pending = "pending"
+    merged = "merged"
+    discarded = "discarded"
+
+
 class TriggerType(str, Enum):
     cron = "cron"
     event = "event"
@@ -162,6 +168,8 @@ class Task(SQLModel, table=True):
     conversation_state: Optional[str] = Field(default=None)
     # Chat conversation this task belongs to (optional)
     conversation_id: Optional[int] = Field(default=None, foreign_key="conversations.id")
+    # JSON array of skill names to allow for this specific task (overrides defaults)
+    allowed_skill_names_override: Optional[str] = Field(default=None)
     # JSON-serialised routine generation config (if this is a routine generation task)
     # Format: {"description": "user description"}
     routine_generation_config: Optional[str] = Field(default=None)
@@ -279,8 +287,26 @@ class JournalEntry(SQLModel, table=True):
     user: Optional["User"] = Relationship(back_populates="journal_entries")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# API-level Pydantic schemas (not table=True — used for request/response bodies)
+# ─────────────────────────────────────────────────────────────────────────────# ───────────────────────────────────────────────────────────────────────────────
+# Dev Pull Requests (created by the Development Skill)
+# ───────────────────────────────────────────────────────────────────────────────
+
+class DevPullRequest(SQLModel, table=True):
+    __tablename__ = "dev_pull_requests"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_name: str = Field(index=True)
+    branch_name: str
+    task_id: Optional[int] = Field(default=None, foreign_key="tasks.id")
+    status: DevPRStatus = Field(default=DevPRStatus.pending)
+    commit_message: str = Field(default="")
+    # Full git diff output (capped at 50 KB)
+    diff: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# ───────────────────────────────────────────────────────────────────────────────# API-level Pydantic schemas (not table=True — used for request/response bodies)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class UserRead(SQLModel):

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Send, Bot, User, Wrench, Trash2, Cpu, AlertCircle,
-  Plus, MessageSquare, Menu, Pencil, Check, X
+  Plus, MessageSquare, Menu, Pencil, Check, X, ChevronDown
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -189,10 +189,13 @@ export default function ChatPage() {
   const [loadingConvs, setLoadingConvs]   = useState(true)
   const [loadingMsgs, setLoadingMsgs]     = useState(false)
 
-  const [input, setInput]         = useState('')
-  const [persona, setPersona]     = useState('')
-  const [sending, setSending]     = useState(false)
-  const [activeTaskId, setActiveTaskId] = useState(null)
+  const [input, setInput]                 = useState('')
+  const [persona, setPersona]             = useState('')
+  const [sending, setSending]             = useState(false)
+  const [activeTaskId, setActiveTaskId]   = useState(null)
+  const [availableSkills, setAvailableSkills] = useState([])
+  const [selectedTools, setSelectedTools] = useState(null)  // null = all tools
+  const [toolPickerOpen, setToolPickerOpen] = useState(false)
 
   const bottomRef      = useRef(null)
   const inputRef       = useRef(null)
@@ -203,6 +206,11 @@ export default function ChatPage() {
 
   // Load conversations on mount
   useEffect(() => { loadConversations() }, [mockMode])
+
+  // Load available skills for the tool selector
+  useEffect(() => {
+    API.getSkills(mockMode).then(skills => setAvailableSkills(skills.map(s => s.name))).catch(() => {})
+  }, [mockMode])
 
   const loadConversations = async () => {
     setLoadingConvs(true)
@@ -318,7 +326,7 @@ export default function ChatPage() {
     setMessages(prev => [...prev, { id: tempId, role: 'user', content: text, created_at: new Date().toISOString() }])
 
     try {
-      const res = await API.sendConversationMessage(convId, text, mockMode)
+      const res = await API.sendConversationMessage(convId, text, selectedTools, mockMode)
       const asstId = res?.assistant_message?.id ?? `asst-${Date.now()}`
       pendingIdRef.current = asstId
       setMessages(prev => [
@@ -446,6 +454,43 @@ export default function ChatPage() {
 
         {/* Input */}
         <div className="shrink-0 px-4 py-3 border-t border-jarvis-border">
+          {/* Tool picker popover */}
+          {toolPickerOpen && availableSkills.length > 0 && (
+            <div className="mb-2 glass rounded-xl border border-jarvis-border p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-jarvis-muted uppercase tracking-wider">Tools for this message</span>
+                <button onClick={() => { setSelectedTools(null); setToolPickerOpen(false) }} className="text-xs text-jarvis-muted hover:text-jarvis-cyan">Reset (all)</button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {availableSkills.map(name => {
+                  const active = selectedTools === null || selectedTools.includes(name)
+                  return (
+                    <button
+                      key={name}
+                      onClick={() => {
+                        if (selectedTools === null) {
+                          // switching from "all" to specific: deselect this one
+                          setSelectedTools(availableSkills.filter(s => s !== name))
+                        } else if (selectedTools.includes(name)) {
+                          const next = selectedTools.filter(s => s !== name)
+                          setSelectedTools(next.length === availableSkills.length ? null : next)
+                        } else {
+                          const next = [...selectedTools, name]
+                          setSelectedTools(next.length === availableSkills.length ? null : next)
+                        }
+                      }}
+                      className={clsx(
+                        'px-2 py-1 rounded-lg text-xs font-mono border transition-colors',
+                        active
+                          ? 'bg-jarvis-cyan/10 border-jarvis-cyan/40 text-jarvis-cyan'
+                          : 'bg-transparent border-jarvis-border text-jarvis-muted/50 line-through'
+                      )}
+                    >{name}</button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex items-end gap-2">
             <div className="flex-1 glass rounded-xl border-jarvis-border focus-within:border-jarvis-cyan/50 transition-colors">
               <textarea
@@ -459,6 +504,26 @@ export default function ChatPage() {
                 className="w-full bg-transparent px-4 py-3 text-sm text-jarvis-text placeholder:text-jarvis-muted/50 outline-none resize-none max-h-32 overflow-y-auto"
                 style={{ fieldSizing: 'content' }}
               />
+              {/* Tool selector toggle row */}
+              <div className="flex items-center gap-2 px-3 pb-2">
+                <button
+                  onClick={() => setToolPickerOpen(o => !o)}
+                  className={clsx(
+                    'flex items-center gap-1 text-[11px] rounded-md px-2 py-0.5 border transition-colors',
+                    toolPickerOpen
+                      ? 'bg-jarvis-cyan/10 border-jarvis-cyan/30 text-jarvis-cyan'
+                      : 'border-jarvis-border text-jarvis-muted hover:text-jarvis-cyan hover:border-jarvis-cyan/30'
+                  )}
+                >
+                  <Wrench size={10} />
+                  {selectedTools === null
+                    ? 'All tools'
+                    : selectedTools.length === 0
+                      ? 'No tools'
+                      : `${selectedTools.length} tool${selectedTools.length !== 1 ? 's' : ''}`}
+                  <ChevronDown size={9} className={clsx('transition-transform', toolPickerOpen && 'rotate-180')} />
+                </button>
+              </div>
             </div>
             <button
               onClick={send}

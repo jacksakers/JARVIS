@@ -9,10 +9,13 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 
 from app.api import feed, journal, routines, skills, tasks, users, ws
 from app.api import auth as auth_router
 from app.api import conversations as convs_router
+from app.api import development as dev_router
 from app.config import load_config
 from app.database import init_db, session_scope
 from app.models import Skill, User
@@ -144,6 +147,7 @@ app.include_router(skills.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(auth_router.router, prefix=API_PREFIX)
 app.include_router(convs_router.router, prefix=API_PREFIX)
+app.include_router(dev_router.router, prefix=API_PREFIX)
 app.include_router(ws.router)  # WebSocket at /ws (no version prefix)
 
 

@@ -2,19 +2,20 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Inbox, Bot, Zap, List, BookOpen, Terminal, Settings,
-  Cpu, Wifi, WifiOff, AlertCircle, TestTube2, X
+  Cpu, Wifi, WifiOff, AlertCircle, TestTube2, X, Code2
 } from 'lucide-react'
 import useStore from '../store'
 import clsx from 'clsx'
 
 const NAV = [
-  { to: '/',         icon: Inbox,    label: 'Feed',        badge: 'unread' },
-  { to: '/chat',     icon: Bot,      label: 'Chat',        badge: null },
-  { to: '/routines', icon: Zap,      label: 'Automations', badge: null },
-  { to: '/tasks',    icon: List,     label: 'Task Queue',  badge: null },
-  { to: '/journal',  icon: BookOpen, label: 'Journal',     badge: null },
-  { to: '/debug',    icon: Terminal, label: 'Debug',       badge: null },
-  { to: '/settings', icon: Settings, label: 'Settings',    badge: null },
+  { to: '/',            icon: Inbox,    label: 'Feed',        badge: 'unread' },
+  { to: '/chat',        icon: Bot,      label: 'Chat',        badge: null },
+  { to: '/routines',    icon: Zap,      label: 'Automations', badge: null },
+  { to: '/tasks',       icon: List,     label: 'Task Queue',  badge: null },
+  { to: '/journal',     icon: BookOpen, label: 'Journal',     badge: null },
+  { to: '/development', icon: Code2,    label: 'Development', badge: null },
+  { to: '/debug',       icon: Terminal, label: 'Debug',       badge: null },
+  { to: '/settings',    icon: Settings, label: 'Settings',    badge: null },
 ]
 
 function WsIndicator() {

@@ -30,3 +30,9 @@ memory:
 default_user:
   name: "User"
   is_primary: true
+
+# Development Intern feature — set root_dir to your projects folder
+development:
+  # Absolute path to the directory containing your local Git repositories
+  # JARVIS can only access repositories inside this folder (path-traversal safe)
+  root_dir: "/home/jack/projects"   # e.g. "C:/Users/YourName/projects"

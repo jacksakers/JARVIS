@@ -143,6 +143,7 @@ class BackgroundWorker:
             task_conversation_id = task.conversation_id
             task_conv_state = task.conversation_state
             task_gen_config = task.routine_generation_config
+            task_allowed_skills_override = task.allowed_skill_names_override
 
         manager.broadcast_from_thread(
             "task_started",
@@ -161,6 +162,8 @@ class BackgroundWorker:
                     routine_id=task_routine_id,
                     system_prompt_override=task_system_override,
                     saved_state=task_conv_state,
+                    conversation_id=task_conversation_id,
+                    allowed_skill_names_override=task_allowed_skills_override,
                 )
                 self._save_result(
                     task_id=task_id,
@@ -182,6 +185,8 @@ class BackgroundWorker:
         routine_id: Optional[int],
         system_prompt_override: Optional[str],
         saved_state: Optional[str] = None,
+        conversation_id: Optional[int] = None,
+        allowed_skill_names_override: Optional[str] = None,
     ):
         """Set up and run the AgentLoop for this task. Returns (result_md, memory)."""
         system_prompt = system_prompt_override or _DEFAULT_SYSTEM_PROMPT
@@ -195,8 +200,16 @@ class BackgroundWorker:
                         system_prompt = routine.system_prompt
                     # Use the routine's explicit skill list (may be empty = no skills)
                     allowed_skills = routine.get_allowed_skills()
+        elif allowed_skill_names_override is not None:
+            # Per-task skill override (e.g. from chat tool selector or dev tasks)
+            try:
+                parsed = json.loads(allowed_skill_names_override)
+                if isinstance(parsed, list):
+                    allowed_skills = parsed
+            except Exception:
+                pass
 
-        # Restore conversation state if this task was paused
+        # Restore conversation state if this task was paused (ask_user resume)
         if saved_state:
             try:
                 state_dict = json.loads(saved_state)
@@ -219,6 +232,33 @@ class BackgroundWorker:
                 max_recent_turns=self._max_recent_turns,
                 max_tokens=self._max_tokens,
             )
+            # Load prior conversation messages as context for chat tasks
+            if conversation_id:
+                from sqlmodel import select
+                with session_scope() as session:
+                    prior_msgs = session.exec(
+                        select(ConversationMessage)
+                        .where(ConversationMessage.conversation_id == conversation_id)
+                        .where(ConversationMessage.content != "")
+                        .where(ConversationMessage.task_id != task_id)
+                        .order_by(ConversationMessage.created_at.asc())
+                    ).all()
+                    # Inject prior messages as completed turns in memory
+                    i = 0
+                    while i < len(prior_msgs):
+                        msg = prior_msgs[i]
+                        if msg.role == "user":
+                            turn: List[Dict[str, Any]] = [{"role": "user", "content": msg.content}]
+                            if i + 1 < len(prior_msgs) and prior_msgs[i + 1].role == "assistant":
+                                turn.append({"role": "assistant", "content": prior_msgs[i + 1].content})
+                                i += 2
+                            else:
+                                i += 1
+                            memory._turns.append(turn)
+                        else:
+                            i += 1
+                    if prior_msgs:
+                        logger.info("Task %d: loaded %d prior messages as context.", task_id, len(prior_msgs))
 
         def on_event(event_type: str, data: Dict[str, Any]) -> None:
             manager.broadcast_from_thread(event_type, {"task_id": task_id, **data})

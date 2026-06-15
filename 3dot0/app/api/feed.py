@@ -141,11 +141,10 @@ def reply_to_question(
     ).first()
 
     if waiting_task and waiting_task.status == TaskStatus.waiting:
-        # Re-queue with the reply injected into the prompt
-        waiting_task.prompt = (
-            waiting_task.prompt
-            + f"\n\n[User answered your question: {reply_text}]"
-        )
+        # Re-queue: pass only the reply as the new prompt so the LLM sees
+        # the restored memory context (original question + ask_user call)
+        # followed by the user's answer — prevents the double-question bug.
+        waiting_task.prompt = f"[User reply]: {reply_text}"
         waiting_task.status = TaskStatus.queued
         waiting_task.question_feed_item_id = None
         session.add(waiting_task)

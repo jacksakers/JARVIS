@@ -1,6 +1,7 @@
 """API router: chat conversations."""
+import json
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, func, select
@@ -152,6 +153,12 @@ def send_message(
     if not prompt:
         raise HTTPException(status_code=422, detail="content is required.")
 
+    # Optional per-message tool allowlist (None = all tools)
+    allowed_skill_names = payload.get("allowed_skill_names", None)
+    allowed_skill_names_json: Optional[str] = None
+    if isinstance(allowed_skill_names, list):
+        allowed_skill_names_json = json.dumps(allowed_skill_names)
+
     now = datetime.now(timezone.utc)
 
     # Save the user message
@@ -169,6 +176,7 @@ def send_message(
         prompt=prompt,
         conversation_id=conv_id,
         system_prompt_override=conv.system_prompt_override,
+        allowed_skill_names_override=allowed_skill_names_json,
         status=TaskStatus.queued,
     )
     session.add(task)
