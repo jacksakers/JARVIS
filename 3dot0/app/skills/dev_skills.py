@@ -416,9 +416,10 @@ class DevEditFile(BaseSkill):
 class DevWriteFile(BaseSkill):
     name = "dev_write_file"
     description = (
-        "Create a new file or completely overwrite an existing file with new content. "
-        "Use this to create new files from scratch. "
-        "For editing existing files use dev_edit_file instead."
+        "Write the complete content of a file (creates new or overwrites existing). "
+        "This is the primary way to modify files: read the file first with dev_read_file, "
+        "then call this with the full updated content. "
+        "Always supply the entire file — never partial content."
     )
     input_model = DevWriteFileInput
 

@@ -69,7 +69,6 @@ _DEV_SKILL_NAMES = [
     "dev_read_file",
     "dev_search_codebase",
     "dev_create_branch",
-    "dev_edit_file",
     "dev_write_file",
     "dev_commit_pr",
 ]
@@ -80,23 +79,20 @@ _DEV_SYSTEM_PROMPT = (
     "Follow this EXACT workflow — do not skip steps:\n"
     "1. Call dev_list_tree to understand the project structure\n"
     "2. Call dev_search_codebase to find files relevant to the task\n"
-    "3. Call dev_read_file to read specific files (ALWAYS read before editing)\n"
+    "3. Call dev_read_file to read every file you will need to change (read the FULL file)\n"
     "4. Call dev_create_branch to create a feature branch (format: 'jarvis/<feature>')\n"
-    "5. Make your changes using dev_edit_file (line-number edits) or dev_write_file (new files)\n"
-    "6. Repeat steps 3 and 5 for all required changes, re-reading after each edit to verify\n"
-    "7. Call dev_commit_pr with a clear commit message when all edits are complete\n\n"
-    "HOW TO EDIT FILES (important):\n"
-    "- dev_read_file shows line numbers like '   42 | code here'. Use those numbers.\n"
-    "- dev_edit_file(start_line, end_line, new_content): replaces lines start–end with new_content.\n"
-    "  Example: to replace line 42 only, use start_line=42, end_line=42.\n"
-    "  Example: to insert after line 10 without replacing anything, use start_line=11, end_line=10.\n"
-    "  Example: to append to end of a 50-line file, use start_line=51, end_line=50.\n"
-    "- dev_write_file(file_path, content): creates a brand-new file or overwrites entirely.\n"
-    "  Use this for new files only — use dev_edit_file for changes to existing files.\n\n"
+    "5. For each file that needs changes: call dev_write_file with the COMPLETE new file content\n"
+    "6. Repeat steps 3 and 5 for any additional files\n"
+    "7. Call dev_commit_pr with a clear commit message when all files are written\n\n"
+    "HOW TO MODIFY FILES (important):\n"
+    "- dev_read_file: always read the ENTIRE file first (omit start_line/end_line).\n"
+    "- dev_write_file(file_path, content): write the COMPLETE file content with your changes \n"
+    "  incorporated. This is the ONLY way to modify existing files. Do not try to write partial \n"
+    "  content — always include the full file from top to bottom with your edits applied.\n"
+    "- For brand-new files, dev_write_file works exactly the same way.\n\n"
     "RULES:\n"
     "- Never edit files on main or master — always create a feature branch first\n"
-    "- Always read a file before editing it to get current line numbers\n"
-    "- Re-read the file after editing to confirm the change was applied correctly\n"
+    "- Always read the complete file before rewriting it\n"
     "- Make minimal, focused changes that address only the requested feature\n"
     "- After dev_commit_pr succeeds, summarise what you changed and why"
 )
