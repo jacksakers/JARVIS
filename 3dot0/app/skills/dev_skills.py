@@ -110,10 +110,32 @@ class DevCreateBranchInput(BaseModel):
 class DevEditFileInput(BaseModel):
     repo_name: str = Field(description="Repository folder name")
     file_path: str = Field(description="Relative file path within the repository")
-    search_block: str = Field(
-        description="The EXACT existing text to replace (must match file content including all whitespace)"
+    start_line: int = Field(
+        description=(
+            "First line to replace (1-indexed, inclusive). "
+            "Use the line numbers shown by dev_read_file."
+        )
     )
-    replace_block: str = Field(description="New text to insert in place of search_block")
+    end_line: int = Field(
+        description=(
+            "Last line to replace (1-indexed, inclusive). "
+            "Set equal to start_line to replace a single line. "
+            "Set to start_line - 1 to insert without replacing any lines."
+        )
+    )
+    new_content: str = Field(
+        description=(
+            "Replacement text for lines start_line through end_line. "
+            "Must include proper indentation. "
+            "Use an empty string to delete those lines entirely."
+        )
+    )
+
+
+class DevWriteFileInput(BaseModel):
+    repo_name: str = Field(description="Repository folder name")
+    file_path: str = Field(description="Relative file path within the repository")
+    content: str = Field(description="Full content to write to the file (creates or overwrites)")
 
 
 class DevCommitPRInput(BaseModel):
@@ -327,9 +349,12 @@ class DevCreateBranch(BaseSkill):
 class DevEditFile(BaseSkill):
     name = "dev_edit_file"
     description = (
-        "Edit a file by replacing an exact block of text with new content. "
-        "search_block must exactly match the existing file content (whitespace included). "
-        "Always call dev_read_file before using this tool so you have the exact text."
+        "Edit a file by replacing a range of lines with new content, using line numbers. "
+        "Always call dev_read_file first to see the current line numbers. "
+        "start_line and end_line are the 1-indexed line numbers to replace (inclusive). "
+        "To insert lines without removing anything, set end_line = start_line - 1. "
+        "To delete lines, set new_content to an empty string. "
+        "This is the ONLY way to edit existing files — do NOT use dev_write_file for edits."
     )
     input_model = DevEditFileInput
 
@@ -347,27 +372,70 @@ class DevEditFile(BaseSkill):
         except Exception as e:
             return f"Error reading file: {e}"
 
-        if params.search_block not in original:
+        lines = original.splitlines(keepends=True)
+        total = len(lines)
+
+        # Validate line numbers
+        if params.start_line < 1:
+            return f"Error: start_line must be >= 1 (got {params.start_line})."
+        if params.end_line < params.start_line - 1:
+            return f"Error: end_line ({params.end_line}) must be >= start_line - 1 ({params.start_line - 1})."
+        if params.start_line > total + 1:
             return (
-                f"Error: search_block not found in '{params.file_path}'. "
-                "The block must match exactly — check whitespace and indentation. "
-                "Re-read the file with dev_read_file and try again."
+                f"Error: start_line ({params.start_line}) is beyond end of file ({total} lines). "
+                f"To append to the file use start_line={total + 1}, end_line={total}."
             )
 
-        count = original.count(params.search_block)
-        if count > 1:
-            return (
-                f"Error: search_block appears {count} times in '{params.file_path}'. "
-                "Add more surrounding context to make it unique."
-            )
+        # Build new file content
+        # Lines before the replacement range (0-indexed: 0 .. start_line-2)
+        before = lines[: params.start_line - 1]
+        # Lines after the replacement range (0-indexed: end_line .. end)
+        after = lines[params.end_line :] if params.end_line <= total else []
 
-        new_content = original.replace(params.search_block, params.replace_block, 1)
+        # Ensure new_content ends with a newline if it's non-empty and file has trailing newlines
+        replacement = params.new_content
+        if replacement and not replacement.endswith("\n"):
+            replacement += "\n"
+
+        new_file = "".join(before) + replacement + "".join(after)
+
         try:
-            full_path.write_text(new_content, encoding="utf-8")
+            full_path.write_text(new_file, encoding="utf-8")
         except Exception as e:
             return f"Error writing file: {e}"
 
-        return f"Successfully updated '{params.repo_name}/{params.file_path}'."
+        replaced_count = max(0, params.end_line - params.start_line + 1)
+        new_line_count = len(replacement.splitlines()) if replacement else 0
+        return (
+            f"Successfully edited '{params.repo_name}/{params.file_path}': "
+            f"replaced lines {params.start_line}–{params.end_line} "
+            f"({replaced_count} line(s) → {new_line_count} line(s))."
+        )
+
+
+class DevWriteFile(BaseSkill):
+    name = "dev_write_file"
+    description = (
+        "Create a new file or completely overwrite an existing file with new content. "
+        "Use this to create new files from scratch. "
+        "For editing existing files use dev_edit_file instead."
+    )
+    input_model = DevWriteFileInput
+
+    def execute(self, params: DevWriteFileInput) -> str:
+        try:
+            full_path = _file_path(params.repo_name, params.file_path)
+        except ValueError as e:
+            return f"Error: {e}"
+
+        try:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            full_path.write_text(params.content, encoding="utf-8")
+        except Exception as e:
+            return f"Error writing file: {e}"
+
+        action = "Created" if not full_path.exists() else "Wrote"
+        return f"{action} '{params.repo_name}/{params.file_path}' ({len(params.content.splitlines())} lines)."
 
 
 class DevCommitPR(BaseSkill):

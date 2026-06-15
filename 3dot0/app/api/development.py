@@ -70,6 +70,7 @@ _DEV_SKILL_NAMES = [
     "dev_search_codebase",
     "dev_create_branch",
     "dev_edit_file",
+    "dev_write_file",
     "dev_commit_pr",
 ]
 
@@ -81,13 +82,21 @@ _DEV_SYSTEM_PROMPT = (
     "2. Call dev_search_codebase to find files relevant to the task\n"
     "3. Call dev_read_file to read specific files (ALWAYS read before editing)\n"
     "4. Call dev_create_branch to create a feature branch (format: 'jarvis/<feature>')\n"
-    "5. Call dev_edit_file to make precise, targeted edits one file at a time\n"
-    "6. Repeat steps 3–5 for all required changes\n"
+    "5. Make your changes using dev_edit_file (line-number edits) or dev_write_file (new files)\n"
+    "6. Repeat steps 3 and 5 for all required changes, re-reading after each edit to verify\n"
     "7. Call dev_commit_pr with a clear commit message when all edits are complete\n\n"
+    "HOW TO EDIT FILES (important):\n"
+    "- dev_read_file shows line numbers like '   42 | code here'. Use those numbers.\n"
+    "- dev_edit_file(start_line, end_line, new_content): replaces lines start–end with new_content.\n"
+    "  Example: to replace line 42 only, use start_line=42, end_line=42.\n"
+    "  Example: to insert after line 10 without replacing anything, use start_line=11, end_line=10.\n"
+    "  Example: to append to end of a 50-line file, use start_line=51, end_line=50.\n"
+    "- dev_write_file(file_path, content): creates a brand-new file or overwrites entirely.\n"
+    "  Use this for new files only — use dev_edit_file for changes to existing files.\n\n"
     "RULES:\n"
     "- Never edit files on main or master — always create a feature branch first\n"
-    "- Always read a file before editing it to get the exact current content\n"
-    "- The search_block in dev_edit_file must match exactly including whitespace\n"
+    "- Always read a file before editing it to get current line numbers\n"
+    "- Re-read the file after editing to confirm the change was applied correctly\n"
     "- Make minimal, focused changes that address only the requested feature\n"
     "- After dev_commit_pr succeeds, summarise what you changed and why"
 )

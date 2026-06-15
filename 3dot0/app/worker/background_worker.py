@@ -275,9 +275,15 @@ class BackgroundWorker:
             memory=memory,
             on_event=on_event,
         )
-        agent.MAX_TOOL_ITERATIONS = self._max_tool_iterations
 
-        result = agent.run_turn(prompt, allowed_skill_names=allowed_skills)
+        # Dev tasks need more iterations (explore → search → read → branch → edit × N → commit)
+        is_dev_task = (
+            allowed_skill_names_override is not None
+            and "dev_list_repos" in (allowed_skill_names_override or "")
+        )
+        max_iters = 20 if is_dev_task else self._max_tool_iterations
+
+        result = agent.run_turn(prompt, allowed_skill_names=allowed_skills, max_iterations=max_iters)
         return result, memory
 
     def _process_routine_generation(

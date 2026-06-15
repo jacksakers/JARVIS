@@ -13,6 +13,11 @@ const _storedUser  = (() => {
   catch { return null }
 })()
 
+const _storedDevTask = (() => {
+  try { return JSON.parse(localStorage.getItem('jarvis_dev_task') || 'null') }
+  catch { return null }
+})()
+
 const useStore = create((set, get) => ({
   // ── Mock mode ────────────────────────────────────────────────────────────
   mockMode: MOCK_DEFAULT,
@@ -77,6 +82,18 @@ const useStore = create((set, get) => ({
   // ── Active conversation ───────────────────────────────────────────
   activeConversationId: null,
   setActiveConversationId: (id) => set({ activeConversationId: id }),
+
+  // ── Development task (persisted) ─────────────────────────────────
+  // { taskId, projectName, taskStatus, prId }
+  devTaskState: _storedDevTask,
+  setDevTaskState: (state) => {
+    if (state) {
+      localStorage.setItem('jarvis_dev_task', JSON.stringify(state))
+    } else {
+      localStorage.removeItem('jarvis_dev_task')
+    }
+    set({ devTaskState: state })
+  },
 }))
 
 export default useStore

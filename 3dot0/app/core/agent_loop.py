@@ -75,6 +75,7 @@ class AgentLoop:
         self,
         user_input: str,
         allowed_skill_names: Optional[List[str]] = None,
+        max_iterations: Optional[int] = None,
     ) -> Optional[str]:
         """
         Process one full user turn.
@@ -84,9 +85,12 @@ class AgentLoop:
           - []   → expose NO skills (routine with nothing checked)
           - ['x'] → expose only skill 'x'
 
+        max_iterations: override MAX_TOOL_ITERATIONS for this turn.
+
         Returns the final assistant text (Markdown), or None if interrupted.
         """
         self.memory.append_user(user_input)
+        max_iters = max_iterations if max_iterations is not None else self.MAX_TOOL_ITERATIONS
 
         tools = (
             self.registry.get_filtered_schemas(allowed_skill_names)
@@ -97,14 +101,15 @@ class AgentLoop:
         if tools is not None and len(tools) == 0:
             tools = None
 
-        for iteration in range(self.MAX_TOOL_ITERATIONS):
+        content = ""
+        for iteration in range(max_iters):
             if self.stop_event.is_set():
                 self.memory.close_turn()
                 return None
 
             messages = self.memory.get_messages()
             # On the final iteration suppress tools to force a plain-text response
-            active_tools = tools if iteration < self.MAX_TOOL_ITERATIONS - 1 else None
+            active_tools = tools if iteration < max_iters - 1 else None
 
             content, tool_calls = self._stream_response(messages, active_tools)
 
@@ -114,6 +119,19 @@ class AgentLoop:
 
             if not tool_calls:
                 # ── Final answer ──────────────────────────────────────────
+                # If model returned nothing, ask it to summarise what it did
+                if not content.strip() and iteration > 0:
+                    self.on_event("status", {"message": "Generating summary…"})
+                    summary_msgs = self.memory.get_messages() + [
+                        {"role": "user", "content": (
+                            "Please provide a clear Markdown summary of everything you "
+                            "accomplished in this task, including which files you read/edited "
+                            "and what changes were made."
+                        )}
+                    ]
+                    summary_content, _ = self._stream_response(summary_msgs, None)
+                    content = summary_content or "Task completed (no summary generated)."
+
                 self.memory.append_assistant(content)
                 self.memory.close_turn()
 
@@ -142,9 +160,18 @@ class AgentLoop:
 
             self.memory.append_tool_turn(assistant_msg, tool_results)
 
-        # Exceeded max iterations — return whatever content we have
+        # Exceeded max iterations — force a plain-text summary
+        self.on_event("status", {"message": "Max iterations reached — generating summary…"})
+        summary_msgs = self.memory.get_messages() + [
+            {"role": "user", "content": (
+                "You have reached the tool call limit. Please provide a clear Markdown summary "
+                "of everything you accomplished so far, and what (if anything) still needs to be done."
+            )}
+        ]
+        final_content, _ = self._stream_response(summary_msgs, None)
+        self.memory.append_assistant(final_content or content or "Iteration limit reached.")
         self.memory.close_turn()
-        return content or "I was unable to complete the task within the iteration limit."
+        return final_content or content or "Iteration limit reached."
 
     # ── Streaming ────────────────────────────────────────────────────────────
 
@@ -174,7 +201,6 @@ class AgentLoop:
                     if tool_calls is None:
                         tool_calls = []
                     tool_calls.extend(chunk.tool_calls)
-                    self.on_event("tool_call", {"name": chunk.tool_calls[-1].name, "arguments": chunk.tool_calls[-1].arguments})
 
         except Exception as exc:
             self.on_event("error", {"message": str(exc)})

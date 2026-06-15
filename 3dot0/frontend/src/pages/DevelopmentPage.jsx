@@ -119,10 +119,12 @@ function EventLine({ ev }) {
 // ── Main DevelopmentPage ──────────────────────────────────────────────────
 
 export default function DevelopmentPage() {
-  const mockMode = useStore(s => s.mockMode)
-  const wsEvents = useStore(s => s.wsEvents)
+  const mockMode       = useStore(s => s.mockMode)
+  const wsEvents       = useStore(s => s.wsEvents)
+  const devTaskState   = useStore(s => s.devTaskState)
+  const setDevTaskState = useStore(s => s.setDevTaskState)
 
-  const [view, setView] = useState('projects') // 'projects' | 'workspace' | 'pr_review' | 'pr_list'
+  const [view, setView] = useState('projects') // 'projects' | 'workspace' | 'pr_review'
   const [projects, setProjects] = useState([])
   const [prs, setPRs] = useState([])
   const [loadingProjects, setLoadingProjects] = useState(true)
@@ -131,15 +133,17 @@ export default function DevelopmentPage() {
   const [submitting, setSubmitting] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState(null)
   const [taskEvents, setTaskEvents] = useState([])
-  const [taskStatus, setTaskStatus] = useState(null) // null|'running'|'done'|'failed'
+  const [taskStatus, setTaskStatus] = useState(null) // null|'queued'|'running'|'done'|'failed'
   const [activePR, setActivePR] = useState(null)
   const [loadingPR, setLoadingPR] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
-  const eventsEndRef = useRef(null)
+  const eventsEndRef  = useRef(null)
+  const activeTaskRef = useRef(null)
+  useEffect(() => { activeTaskRef.current = activeTaskId }, [activeTaskId])
 
-  // Load projects and PRs on mount
+  // ── On mount: load projects/PRs and restore any active task ──────────────
   useEffect(() => {
     setLoadingProjects(true)
     Promise.all([
@@ -148,6 +152,52 @@ export default function DevelopmentPage() {
     ]).then(([projs, prList]) => {
       setProjects(projs)
       setPRs(prList)
+
+      // Restore persisted state
+      if (devTaskState) {
+        const { taskId, projectName, taskStatus: savedStatus, prId } = devTaskState
+        const proj = projs.find(p => p.name === projectName)
+
+        if (prId) {
+          // PR was created — go straight to review
+          const pr = prList.find(p => p.id === prId)
+          if (pr && pr.status === 'pending') {
+            if (proj) setSelectedProject(proj)
+            loadAndShowPR(prId)
+            return
+          }
+        }
+
+        if (savedStatus === 'queued' || savedStatus === 'running') {
+          // Task still in progress — check actual status from server
+          API.getTasks({ status: savedStatus }, mockMode).then(tasks => {
+            const t = tasks.find(t => t.id === taskId)
+            if (t && (t.status === 'queued' || t.status === 'running')) {
+              if (proj) {
+                setSelectedProject(proj)
+                setActiveTaskId(taskId)
+                setTaskStatus(t.status)
+                setTaskEvents([{ type: 'status', message: `Resuming task #${taskId} (${t.status})…` }])
+                setView('workspace')
+              }
+            } else {
+              // Task finished while we were away — check for PR
+              const pending = prList.find(p => p.project_name === projectName && p.status === 'pending')
+              if (pending) {
+                if (proj) setSelectedProject(proj)
+                loadAndShowPR(pending.id)
+              }
+            }
+          }).catch(() => {})
+        } else if (savedStatus === 'done') {
+          // Check if a PR was generated
+          const pending = prList.find(p => p.project_name === projectName && p.status === 'pending')
+          if (pending) {
+            if (proj) setSelectedProject(proj)
+            loadAndShowPR(pending.id)
+          }
+        }
+      }
     }).finally(() => setLoadingProjects(false))
   }, [mockMode])
 
@@ -162,24 +212,33 @@ export default function DevelopmentPage() {
     const ev = wsEvents[wsEvents.length - 1]
     if (!ev) return
     const { event, data } = ev
+    const tid = activeTaskRef.current
 
-    if (event === 'task_started' && data.task_id === activeTaskId) {
+    if (event === 'task_started' && data.task_id === tid) {
       setTaskStatus('running')
+      const cur = useStore.getState().devTaskState
+      if (cur) setDevTaskState({ ...cur, taskStatus: 'running' })
     }
-    if ((event === 'tool_call') && data.task_id === activeTaskId) {
+    if (event === 'tool_call' && data.task_id === tid) {
       setTaskEvents(prev => [...prev, { type: 'tool_call', name: data.name, args: data.arguments }])
     }
-    if ((event === 'tool_result') && data.task_id === activeTaskId) {
+    if (event === 'tool_result' && data.task_id === tid) {
       setTaskEvents(prev => [...prev, { type: 'tool_result', result: data.result }])
     }
-    if (event === 'task_done' && data.task_id === activeTaskId) {
+    if (event === 'status' && data.task_id === tid) {
+      setTaskEvents(prev => [...prev, { type: 'status', message: data.message }])
+    }
+    if (event === 'task_done' && data.task_id === tid) {
       setTaskStatus('done')
+      const cur = useStore.getState().devTaskState
+      if (cur) setDevTaskState({ ...cur, taskStatus: 'done' })
       setTaskEvents(prev => [...prev, { type: 'status', message: '✓ Task complete — checking for PR…' }])
-      // Poll for the PR
       setTimeout(() => refreshPRs(), 1500)
     }
-    if (event === 'task_failed' && data.task_id === activeTaskId) {
+    if (event === 'task_failed' && data.task_id === tid) {
       setTaskStatus('failed')
+      const cur = useStore.getState().devTaskState
+      if (cur) setDevTaskState({ ...cur, taskStatus: 'failed' })
       setTaskEvents(prev => [
         ...prev,
         { type: 'status', message: `✗ Task failed: ${data.error ?? 'Unknown error'}` },
@@ -187,7 +246,9 @@ export default function DevelopmentPage() {
     }
     if (event === 'dev_pr_created') {
       refreshPRs()
-      if (data.task_id === activeTaskId || view === 'workspace') {
+      const cur = useStore.getState().devTaskState
+      if (cur) setDevTaskState({ ...cur, prId: data.pr_id })
+      if (data.task_id === tid || view === 'workspace') {
         loadAndShowPR(data.pr_id)
       }
     }
@@ -242,6 +303,7 @@ export default function DevelopmentPage() {
     try {
       const res = await API.createDevTask(selectedProject.name, description.trim(), mockMode)
       setActiveTaskId(res.task_id)
+      setDevTaskState({ taskId: res.task_id, projectName: selectedProject.name, taskStatus: 'queued', prId: null })
       setTaskEvents([{ type: 'status', message: `Task #${res.task_id} queued…` }])
     } catch (err) {
       setTaskStatus('failed')
@@ -256,6 +318,7 @@ export default function DevelopmentPage() {
     setActionLoading(true)
     try {
       await API.mergeDevPR(activePR.id, mockMode)
+      setDevTaskState(null)
       setView('projects')
       setSelectedProject(null)
       setActivePR(null)
@@ -274,6 +337,7 @@ export default function DevelopmentPage() {
     setActionLoading(true)
     try {
       await API.discardDevPR(activePR.id, mockMode)
+      setDevTaskState(null)
       setView('projects')
       setSelectedProject(null)
       setActivePR(null)
@@ -291,6 +355,7 @@ export default function DevelopmentPage() {
     try {
       const res = await API.requestDevChanges(activePR.id, feedback.trim(), mockMode)
       setActiveTaskId(res.task_id)
+      setDevTaskState({ taskId: res.task_id, projectName: activePR.project_name, taskStatus: 'queued', prId: null })
       setTaskEvents([{ type: 'status', message: 'Change request sent — JARVIS is revising…' }])
       setTaskStatus('queued')
       setFeedback('')
