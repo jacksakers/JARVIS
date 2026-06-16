@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   GitBranch, GitMerge, GitPullRequest, Folder, Play, X, Check,
-  ChevronRight, Terminal, RefreshCw, AlertCircle, Code2, Trash2,
-  MessageSquare, ArrowLeft,
+  ChevronRight, ChevronDown, Terminal, RefreshCw, AlertCircle, Code2, Trash2,
+  MessageSquare, ArrowLeft, FileCode, Copy,
 } from 'lucide-react'
 import clsx from 'clsx'
 import * as API from '../api'
@@ -81,6 +81,76 @@ function PRBadge({ status }) {
   )
 }
 
+// ── Directory tree viewer ────────────────────────────────────────────────
+
+function TreeViewer({ tree }) {
+  const [copiedPath, setCopiedPath] = useState(null)
+
+  const items = useMemo(() => {
+    if (!tree) return []
+    const lines = tree.split('\n').slice(1) // skip header line
+    const result = []
+    const pathStack = []
+
+    for (const line of lines) {
+      if (!line.trim()) continue
+      const depth = Math.floor((line.length - line.trimStart().length) / 2)
+      const name = line.trim()
+      const isDir = name.endsWith('/')
+      const cleanName = isDir ? name.slice(0, -1) : name
+      pathStack.length = depth
+      pathStack[depth] = cleanName
+      const fullPath = pathStack.filter(Boolean).join('/')
+      result.push({ name, depth, fullPath, isDir })
+    }
+    return result
+  }, [tree])
+
+  const handleCopy = (path) => {
+    navigator.clipboard.writeText(path).catch(() => {})
+    setCopiedPath(path)
+    setTimeout(() => setCopiedPath(null), 1500)
+  }
+
+  if (!items.length) return <p className="text-jarvis-muted text-xs">Tree unavailable.</p>
+
+  return (
+    <div className="font-mono text-xs max-h-64 overflow-y-auto">
+      {items.map((item, i) => (
+        <div
+          key={i}
+          style={{ paddingLeft: `${item.depth * 14 + 8}px` }}
+          className={clsx(
+            'flex items-center gap-1.5 py-0.5 rounded group',
+            !item.isDir && 'cursor-pointer hover:bg-jarvis-surface/50',
+          )}
+          onClick={() => !item.isDir && handleCopy(item.fullPath)}
+          title={item.isDir ? undefined : `Click to copy: ${item.fullPath}`}
+        >
+          {item.isDir ? (
+            <Folder size={10} className="text-jarvis-cyan/60 shrink-0" />
+          ) : (
+            <FileCode size={10} className="text-jarvis-muted/60 shrink-0" />
+          )}
+          <span className={item.isDir ? 'text-jarvis-muted/80' : 'text-white/70 group-hover:text-white'}>
+            {item.name}
+          </span>
+          {!item.isDir && (
+            <span className={clsx(
+              'ml-auto pr-2 transition-opacity text-[10px]',
+              copiedPath === item.fullPath
+                ? 'text-green-400 opacity-100'
+                : 'text-jarvis-muted/40 opacity-0 group-hover:opacity-100',
+            )}>
+              {copiedPath === item.fullPath ? 'copied!' : 'copy path'}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Task progress event ───────────────────────────────────────────────────
 
 function EventLine({ ev }) {
@@ -138,6 +208,9 @@ export default function DevelopmentPage() {
   const [loadingPR, setLoadingPR] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [projectTree, setProjectTree] = useState(null)
+  const [treeLoading, setTreeLoading] = useState(false)
+  const [treeOpen, setTreeOpen] = useState(false)
 
   const eventsEndRef  = useRef(null)
   const activeTaskRef = useRef(null)
@@ -274,6 +347,14 @@ export default function DevelopmentPage() {
     setTaskStatus(null)
     setActiveTaskId(null)
     setActivePR(null)
+    setProjectTree(null)
+    setTreeOpen(true)
+    // Fetch directory tree
+    setTreeLoading(true)
+    API.getDevProjectTree(project.name, '.', mockMode)
+      .then(res => setProjectTree(res?.tree ?? null))
+      .catch(() => setProjectTree(null))
+      .finally(() => setTreeLoading(false))
     // Check for an existing pending PR for this project
     const pending = prs.find(p => p.status === 'pending' && p.project_name === project.name)
     if (pending) {
@@ -332,6 +413,23 @@ export default function DevelopmentPage() {
       await refreshPRs()
     } catch (err) {
       alert(`Discard failed: ${err.message}`)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleCancel = async () => {
+    if (!activePR || !window.confirm('Cancel this PR? The branch will not be deleted.')) return
+    setActionLoading(true)
+    try {
+      await API.cancelDevPR(activePR.id, mockMode)
+      setDevTaskState(null)
+      setActivePR(null)
+      await refreshPRs()
+      setView('projects')
+      setSelectedProject(null)
+    } catch (err) {
+      alert(`Cancel failed: ${err.message}`)
     } finally {
       setActionLoading(false)
     }
@@ -484,6 +582,28 @@ export default function DevelopmentPage() {
           {/* ── WORKSPACE VIEW ── */}
           {view === 'workspace' && selectedProject && (
             <div className="max-w-2xl space-y-5">
+              {/* Project tree panel */}
+              <div className="glass rounded-xl border border-jarvis-border overflow-hidden">
+                <button
+                  onClick={() => setTreeOpen(o => !o)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-jarvis-surface/30 transition-colors"
+                >
+                  {treeOpen ? <ChevronDown size={13} className="text-jarvis-muted" /> : <ChevronRight size={13} className="text-jarvis-muted" />}
+                  <Folder size={12} className="text-jarvis-cyan" />
+                  <span className="text-xs font-semibold text-jarvis-muted uppercase tracking-wider">Project Structure</span>
+                  <span className="ml-auto text-[10px] text-jarvis-muted/50">click a file to copy its path</span>
+                </button>
+                {treeOpen && (
+                  <div className="border-t border-jarvis-border px-2 py-2">
+                    {treeLoading ? (
+                      <p className="text-jarvis-muted text-xs px-2 py-1">Loading…</p>
+                    ) : (
+                      <TreeViewer tree={projectTree} />
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Task input */}
               {!activeTaskId && (
                 <div className="glass rounded-xl p-4 border border-jarvis-border">
@@ -494,7 +614,7 @@ export default function DevelopmentPage() {
                     onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) submitTask() }}
                     placeholder={`e.g. "Add a dark mode toggle to the settings page"`}
                     rows={4}
-                    className="w-full bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-jarvis-muted/50 outline-none focus:border-jarvis-cyan/50 resize-none"
+                    className="w-full bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-jarvis-muted/50 outline-none focus:border-jarvis-cyan/50 resize-y"
                   />
                   <div className="flex items-center justify-between mt-3">
                     <span className="text-xs text-jarvis-muted">Ctrl+Enter to submit</span>
@@ -624,6 +744,15 @@ export default function DevelopmentPage() {
                         <Trash2 size={14} />
                         Discard
                       </button>
+                      <button
+                        onClick={handleCancel}
+                        disabled={actionLoading}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-jarvis-surface border border-jarvis-border text-jarvis-muted text-sm font-semibold hover:text-white hover:border-jarvis-muted disabled:opacity-50 transition-all"
+                        title="Dismiss this PR record without touching Git — use when the branch no longer exists"
+                      >
+                        <X size={14} />
+                        Cancel PR
+                      </button>
                     </div>
 
                     {/* Request Changes */}
@@ -637,7 +766,7 @@ export default function DevelopmentPage() {
                         onChange={e => setFeedback(e.target.value)}
                         placeholder="Describe what needs to be changed…"
                         rows={3}
-                        className="w-full bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-jarvis-muted/50 outline-none focus:border-jarvis-cyan/50 resize-none"
+                        className="w-full bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-jarvis-muted/50 outline-none focus:border-jarvis-cyan/50 resize-y"
                       />
                       <div className="flex justify-end mt-2">
                         <button

@@ -69,34 +69,51 @@ _DEV_SKILL_NAMES = [
     "dev_read_file",
     "dev_search_codebase",
     "dev_create_branch",
+    "dev_search_replace",
     "dev_write_file",
+    "dev_run_command",
     "dev_commit_pr",
 ]
 
 _DEV_SYSTEM_PROMPT = (
-    "You are JARVIS acting as a senior software developer intern. "
+    "You are JARVIS acting as a senior software engineer. "
     "You have been given a specific coding task for a local repository.\n\n"
-    "Follow this EXACT workflow — do not skip steps:\n"
+    "═══ ARCHITECTURAL PHILOSOPHY ═══\n"
+    "Your primary directive is MODULARITY.\n"
+    "- Never allow a single file to exceed 250 lines of code.\n"
+    "- If adding a feature would push a file over 250 lines, extract existing logic into "
+    "  separate helper files, modules, or sub-components FIRST, then add the feature.\n"
+    "- Small files are easier for you to read, reason about, and edit safely.\n\n"
+    "═══ WORKFLOW (follow every step in order) ═══\n"
     "1. Call dev_list_tree to understand the project structure\n"
-    "2. Call dev_search_codebase to find files relevant to the task\n"
+    "2. Call dev_search_codebase to locate files relevant to the task\n"
     "3. Call dev_read_file to read every file you will need to change (read the FULL file)\n"
     "4. Call dev_create_branch to create a feature branch (format: 'jarvis/<feature>')\n"
-    "5. For each file that needs changes: call dev_write_file with the COMPLETE new file content\n"
-    "6. Repeat steps 3 and 5 for any additional files\n"
-    "7. Call dev_commit_pr with a clear commit message when all files are written\n\n"
-    "HOW TO MODIFY FILES (important):\n"
-    "- dev_read_file: always read the ENTIRE file first (omit start_line/end_line).\n"
-    "- dev_write_file(file_path, content): write the COMPLETE file content with your changes \n"
-    "  incorporated. This is the ONLY way to modify existing files. Do not try to write partial \n"
-    "  content — always include the full file from top to bottom with your edits applied.\n"
-    "- For brand-new files, dev_write_file works exactly the same way.\n"
-    "- CRITICAL: dev_read_file prefixes lines with numbers like '   42 | code here'. Those \n"
-    "  prefixes are for YOUR reference only. Never include them in dev_write_file content. \n"
-    "  The content you write must be raw source code with no line-number prefixes.\n\n"
-    "RULES:\n"
+    "5. Edit files using the appropriate tool (see EDITING section below)\n"
+    "6. Call dev_run_command to validate your changes — fix any errors before moving on\n"
+    "7. Call dev_commit_pr with a clear commit message once all edits are validated\n\n"
+    "═══ EDITING FILES ═══\n"
+    "Choose the right tool based on the size of the change:\n\n"
+    "dev_search_replace(file_path, search_block, replace_block)  ← PREFERRED for targeted edits\n"
+    "  → Use for small, focused changes: fixing a bug, updating a function, changing config.\n"
+    "  → Provide a search_block with 3-5 lines of surrounding context to make the match unique.\n"
+    "  → The backend normalises indentation — minor whitespace mismatches are tolerated.\n"
+    "  → MUCH more efficient than rewriting the whole file for small changes.\n\n"
+    "dev_write_file(file_path, content)  ← use for NEW files or MAJOR rewrites (>50% changes)\n"
+    "  → Always read the file first with dev_read_file.\n"
+    "  → Write the COMPLETE file from top to bottom with ALL changes incorporated.\n"
+    "  → CRITICAL: do NOT include line-number prefixes ('   42 | code') in the content.\n"
+    "  → Never write partial content — the tool overwrites the entire file.\n\n"
+    "═══ VALIDATION ═══\n"
+    "After editing, ALWAYS run a sanity check with dev_run_command before creating a PR:\n"
+    "  - Python: python -c \"import <module>\"  or  python -m pytest -x -q\n"
+    "  - Node.js: node --check <file>  or  npm run build\n"
+    "  - If the output shows errors or tracebacks: fix them, then re-validate.\n"
+    "  - Do NOT call dev_commit_pr until the validation command exits with code 0.\n\n"
+    "═══ RULES ═══\n"
     "- Never edit files on main or master — always create a feature branch first\n"
-    "- Always read the complete file before rewriting it\n"
-    "- Make minimal, focused changes that address only the requested feature\n"
+    "- Always read the complete file before editing it\n"
+    "- Make minimal, focused changes that address only the requested task\n"
     "- After dev_commit_pr succeeds, summarise what you changed and why"
 )
 
@@ -314,6 +331,27 @@ def discard_pr(pr_id: int, session: Session = Depends(get_session)):
     session.commit()
 
     return {"message": f"Discarded '{pr.branch_name}' — returned to {base}."}
+
+
+@router.post("/prs/{pr_id}/cancel")
+def cancel_pr(pr_id: int, session: Session = Depends(get_session)):
+    """
+    Mark a PR as discarded without touching Git.
+    Use this when the branch no longer exists (e.g. a newer PR was already merged)
+    or when you just want to dismiss a stale PR record.
+    """
+    pr = session.get(DevPullRequest, pr_id)
+    if not pr:
+        raise HTTPException(status_code=404, detail="PR not found.")
+    if pr.status != DevPRStatus.pending:
+        raise HTTPException(status_code=400, detail=f"PR is already {pr.status.value}.")
+
+    pr.status = DevPRStatus.discarded
+    pr.updated_at = datetime.now(timezone.utc)
+    session.add(pr)
+    session.commit()
+
+    return {"message": f"PR #{pr_id} cancelled (branch left untouched)."}
 
 
 @router.post("/prs/{pr_id}/request-changes")

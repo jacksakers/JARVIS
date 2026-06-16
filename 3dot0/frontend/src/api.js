@@ -129,5 +129,6 @@ export const getDevPRs          = (mock)           => get('/api/v1/dev/prs', moc
 export const getDevPR           = (id, mock)       => get(`/api/v1/dev/prs/${id}`, mock, () => null)
 export const mergeDevPR         = (id, mock)       => post(`/api/v1/dev/prs/${id}/merge`, null, mock, () => null)
 export const discardDevPR       = (id, mock)       => post(`/api/v1/dev/prs/${id}/discard`, null, mock, () => null)
+export const cancelDevPR        = (id, mock)       => post(`/api/v1/dev/prs/${id}/cancel`, null, mock, () => null)
 export const requestDevChanges  = (id, feedback, mock) => post(`/api/v1/dev/prs/${id}/request-changes`, { feedback }, mock, () => null)
 export const createDevTask      = (project_name, description, mock) => post('/api/v1/dev/task', { project_name, description }, mock, () => null)

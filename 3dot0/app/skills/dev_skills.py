@@ -15,6 +15,7 @@ Workflow JARVIS follows:
   7. dev_commit_pr        → stage + commit + create PR record for user review
 """
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -141,6 +142,38 @@ class DevWriteFileInput(BaseModel):
 class DevCommitPRInput(BaseModel):
     repo_name: str = Field(description="Repository folder name")
     commit_message: str = Field(description="Clear, descriptive commit message")
+
+
+class DevSearchReplaceInput(BaseModel):
+    repo_name: str = Field(description="Repository folder name")
+    file_path: str = Field(description="Relative file path within the repository")
+    search_block: str = Field(
+        description=(
+            "The exact block of code to find. Include 3-5 lines of surrounding context "
+            "to make the match unique. Minor indentation differences are tolerated."
+        )
+    )
+    replace_block: str = Field(
+        description=(
+            "The new code to replace the found block with. "
+            "The backend will auto-align indentation to match the file if your code is left-aligned."
+        )
+    )
+
+
+class DevRunCommandInput(BaseModel):
+    repo_name: str = Field(description="Repository folder name")
+    command: str = Field(
+        description=(
+            "Shell command to run inside the repository directory. "
+            "Examples: 'python -m pytest -x -q', 'npm run build', "
+            "'python -c \"import app\"', 'node --check server.js'."
+        )
+    )
+    timeout: int = Field(
+        default=10,
+        description="Max seconds to wait before killing the process (default: 10, max: 30).",
+    )
 
 
 # ── Skills ────────────────────────────────────────────────────────────────────
@@ -555,3 +588,167 @@ class DevCommitPR(BaseSkill):
                 f"Changes committed to '{current_branch}', "
                 f"but failed to record PR in database: {e}"
             )
+
+
+class DevSearchReplace(BaseSkill):
+    name = "dev_search_replace"
+    description = (
+        "Make a surgical search-and-replace edit to a file without rewriting it entirely. "
+        "Supply a search_block (the code you want to replace, with 3-5 lines of surrounding "
+        "context for uniqueness) and a replace_block (the new code). "
+        "The backend normalises indentation and ignores blank-line differences when matching, "
+        "so minor whitespace mismatches are tolerated. "
+        "Use this for small, targeted edits. Use dev_write_file for new files or major rewrites."
+    )
+    input_model = DevSearchReplaceInput
+
+    @staticmethod
+    def _normalize(line: str) -> str:
+        return line.expandtabs(4).strip()
+
+    @staticmethod
+    def _find_block(file_lines: list, search_lines: list):
+        """
+        Sliding-window search that ignores blank lines and normalises whitespace.
+        Returns (start_idx, end_idx) inclusive, or None.
+        """
+        sig = [(i, DevSearchReplace._normalize(l)) for i, l in enumerate(search_lines) if l.strip()]
+        if not sig:
+            return None
+        norm_file = [DevSearchReplace._normalize(l) for l in file_lines]
+
+        for file_start in range(len(file_lines)):
+            si = 0
+            fi = file_start
+            while si < len(sig) and fi < len(file_lines):
+                if norm_file[fi] == sig[si][1]:
+                    si += 1
+                elif norm_file[fi] == "":
+                    pass  # skip blank lines in file
+                else:
+                    break
+                fi += 1
+            if si == len(sig):
+                return file_start, fi - 1
+
+        return None
+
+    def execute(self, params: DevSearchReplaceInput) -> str:
+        try:
+            full_path = _file_path(params.repo_name, params.file_path)
+        except ValueError as e:
+            return f"Error: {e}"
+
+        if not full_path.exists():
+            return f"File '{params.file_path}' not found in '{params.repo_name}'."
+
+        try:
+            original = full_path.read_text(encoding="utf-8")
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+        file_lines = original.splitlines(keepends=True)
+        search_lines = params.search_block.splitlines()
+
+        result = self._find_block(file_lines, search_lines)
+        if result is None:
+            return (
+                f"Could not find the search block in '{params.file_path}'. "
+                "Use dev_read_file to confirm the exact code, then retry with a more specific search_block "
+                "(include the function definition or a unique comment as context)."
+            )
+
+        start_idx, end_idx = result
+
+        # Detect indentation of the first matched line for auto-indent recovery
+        first_line = file_lines[start_idx]
+        base_indent = len(first_line) - len(first_line.lstrip())
+        indent_str = first_line[:base_indent]
+
+        replace_lines = params.replace_block.splitlines(keepends=True)
+
+        # If the replacement block appears to be left-aligned (no leading whitespace on first line)
+        # and the matched code is indented, auto-apply the base indentation.
+        if replace_lines and base_indent > 0 and not replace_lines[0][:1].isspace():
+            replace_lines = [
+                (indent_str + l) if l.strip() else l
+                for l in replace_lines
+            ]
+
+        replacement = "".join(replace_lines)
+        if replacement and not replacement.endswith("\n"):
+            replacement += "\n"
+
+        before = "".join(file_lines[:start_idx])
+        after = "".join(file_lines[end_idx + 1:])
+        new_content = before + replacement + after
+
+        try:
+            full_path.write_text(new_content, encoding="utf-8")
+        except Exception as e:
+            return f"Error writing file: {e}"
+
+        replaced_count = end_idx - start_idx + 1
+        new_count = len(params.replace_block.splitlines())
+        return (
+            f"Replaced {replaced_count} line(s) with {new_count} line(s) "
+            f"in '{params.repo_name}/{params.file_path}'."
+        )
+
+
+class DevRunCommand(BaseSkill):
+    name = "dev_run_command"
+    description = (
+        "Run a shell command inside a repository directory and return stdout/stderr. "
+        "Use this to validate your changes: run tests, linters, or quick import checks "
+        "to catch errors BEFORE creating a PR. "
+        "Examples: 'python -m pytest -x -q', 'python -c \"import app\"', "
+        "'node --check server.js', 'npm run build'. "
+        "The process is killed after the timeout (default 10s, max 30s). "
+        "Long-running servers will time out — this tool is for validation only."
+    )
+    input_model = DevRunCommandInput
+
+    _BLOCKED_PREFIXES = (
+        "rm ", "rm\t", "rmdir", "del ", "format ", "mkfs", "dd ",
+        "sudo ", ":(){", "shutdown", "reboot", "poweroff",
+    )
+
+    def execute(self, params: DevRunCommandInput) -> str:
+        try:
+            repo_root = _repo_path(params.repo_name)
+        except ValueError as e:
+            return f"Error: {e}"
+
+        cmd_stripped = params.command.strip()
+        cmd_lower = cmd_stripped.lower()
+        for blocked in self._BLOCKED_PREFIXES:
+            if cmd_lower.startswith(blocked):
+                return f"Error: Command '{cmd_stripped}' is not allowed for safety reasons."
+
+        timeout = min(max(1, params.timeout), 30)
+
+        try:
+            result = subprocess.run(
+                cmd_stripped,
+                shell=True,
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            stdout = result.stdout[:3000] if result.stdout else ""
+            stderr = result.stderr[:2000] if result.stderr else ""
+            parts = []
+            if stdout:
+                parts.append(f"STDOUT:\n{stdout.rstrip()}")
+            if stderr:
+                parts.append(f"STDERR:\n{stderr.rstrip()}")
+            if not parts:
+                parts.append("(no output)")
+            return f"Exit code: {result.returncode}\n" + "\n".join(parts)
+        except subprocess.TimeoutExpired:
+            return f"Command timed out after {timeout}s (process killed). Partial output unavailable."
+        except Exception as e:
+            return f"Error running command: {e}"
+
