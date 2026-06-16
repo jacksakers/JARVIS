@@ -70,6 +70,7 @@ class User(SQLModel, table=True):
     feed_items: List["FeedItem"] = Relationship(back_populates="user")
     routines: List["Routine"] = Relationship(back_populates="user")
     journal_entries: List["JournalEntry"] = Relationship(back_populates="user")
+    journal_categories: List["JournalCategory"] = Relationship(back_populates="user")
     conversations: List["Conversation"] = Relationship(back_populates="user")
 
     def get_preferences(self) -> dict:
@@ -262,6 +263,29 @@ class ConversationMessage(SQLModel, table=True):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Journal Categories
+# ─────────────────────────────────────────────────────────────────────────────
+
+class JournalCategory(SQLModel, table=True):
+    __tablename__ = "journal_categories"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+
+    name: str = Field(index=True)
+    # Hex colour used in the UI (e.g. "#06b6d4")
+    color: str = Field(default="#06b6d4")
+    # Emoji or short icon label for quick visual identification
+    icon: str = Field(default="📝")
+    description: str = Field(default="")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user: Optional["User"] = Relationship(back_populates="journal_categories")
+    entries: List["JournalEntry"] = Relationship(back_populates="category")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Journal Entries (Quick Capture)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -270,10 +294,14 @@ class JournalEntry(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)
+    # Optional category for organisation
+    category_id: Optional[int] = Field(default=None, foreign_key="journal_categories.id", index=True)
 
     # Optional title (e.g. "Shopping List", "Project Ideas")
     title: str = Field(default="", index=True)
     content: str
+    # Pinned entries appear at the top of the list
+    pinned: bool = Field(default=False, index=True)
     # Set to True after the background Journal Analysis routine processes this entry
     processed: bool = Field(default=False, index=True)
     # Whether the AI is allowed to read this entry
@@ -285,6 +313,7 @@ class JournalEntry(SQLModel, table=True):
 
     # Relationships
     user: Optional["User"] = Relationship(back_populates="journal_entries")
+    category: Optional["JournalCategory"] = Relationship(back_populates="entries")
 
 
 # ─────────────────────────────────────────────────────────────────────────────# ───────────────────────────────────────────────────────────────────────────────
@@ -393,9 +422,36 @@ class FeedItemRead(SQLModel):
     created_at: datetime
 
 
+class JournalCategoryCreate(SQLModel):
+    name: str
+    color: str = "#06b6d4"
+    icon: str = "📝"
+    description: str = ""
+
+
+class JournalCategoryUpdate(SQLModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+    description: Optional[str] = None
+
+
+class JournalCategoryRead(SQLModel):
+    id: int
+    user_id: int
+    name: str
+    color: str
+    icon: str
+    description: str
+    entry_count: int = 0
+    created_at: datetime
+
+
 class JournalEntryCreate(SQLModel):
     title: str = ""
     content: str
+    category_id: Optional[int] = None
+    pinned: bool = False
     llm_readable: bool = True
     llm_editable: bool = False
 
@@ -403,6 +459,8 @@ class JournalEntryCreate(SQLModel):
 class JournalEntryUpdate(SQLModel):
     title: Optional[str] = None
     content: Optional[str] = None
+    category_id: Optional[int] = None
+    pinned: Optional[bool] = None
     processed: Optional[bool] = None
     llm_readable: Optional[bool] = None
     llm_editable: Optional[bool] = None
@@ -411,13 +469,19 @@ class JournalEntryUpdate(SQLModel):
 class JournalEntryRead(SQLModel):
     id: int
     user_id: int
+    category_id: Optional[int]
     title: str
     content: str
+    pinned: bool
     processed: bool
     llm_readable: bool
     llm_editable: bool
     created_at: datetime
     updated_at: datetime
+    # Denormalised category fields for convenience
+    category_name: Optional[str] = None
+    category_color: Optional[str] = None
+    category_icon: Optional[str] = None
 
 
 class SkillRead(SQLModel):

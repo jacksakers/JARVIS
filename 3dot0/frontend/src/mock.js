@@ -77,11 +77,20 @@ let _tasks = [
   { id: 13, user_id: 1, routine_id: null, prompt: 'Draft a polite but firm follow-up email to the contractor about the delayed quote.', status: 'failed', error_message: 'Ollama connection refused: model not loaded.', created_at: ago(5),   started_at: ago(4),  completed_at: ago(3) },
 ]
 
+let _categories = [
+  { id: 1, user_id: 1, name: 'Personal',  color: '#06b6d4', icon: '🧠', description: 'Thoughts, reflections, and personal notes.',   entry_count: 2, created_at: ago(5000) },
+  { id: 2, user_id: 1, name: 'Fitness',   color: '#22c55e', icon: '🏋️', description: 'Workout logs, nutrition, and health tracking.',  entry_count: 2, created_at: ago(4000) },
+  { id: 3, user_id: 1, name: 'Shopping',  color: '#f59e0b', icon: '🛒', description: 'Shopping lists and purchase tracking.',           entry_count: 1, created_at: ago(3000) },
+  { id: 4, user_id: 1, name: 'Work',      color: '#a855f7', icon: '💼', description: 'Work tasks, meeting notes, and project ideas.',   entry_count: 1, created_at: ago(2000) },
+]
+
 let _journal = [
-  { id: 1, user_id: 1, content: 'Thinking about quitting the side project — it\'s taking too much time away from things that actually matter.',       processed: true,  created_at: ago(1440) },
-  { id: 2, user_id: 1, content: 'Had a great lunch with Alex. She suggested trying a completely different framework for the UI — might be worth it.',  processed: true,  created_at: ago(720) },
-  { id: 3, user_id: 1, content: 'Feel like I\'m finally making real progress on JARVIS. The async architecture is clicking.',                         processed: false, created_at: ago(60) },
-  { id: 4, user_id: 1, content: 'Need to call the insurance company. Keep forgetting.',                                                              processed: false, created_at: ago(10) },
+  { id: 1, user_id: 1, category_id: 1, category_name: 'Personal', category_color: '#06b6d4', category_icon: '🧠', title: '', content: 'Thinking about quitting the side project — it\'s taking too much time away from things that actually matter.', pinned: false, processed: true,  llm_readable: true,  llm_editable: false, created_at: ago(1440), updated_at: ago(1440) },
+  { id: 2, user_id: 1, category_id: 1, category_name: 'Personal', category_color: '#06b6d4', category_icon: '🧠', title: '', content: 'Had a great lunch with Alex. She suggested trying a completely different framework for the UI — might be worth it.', pinned: false, processed: true,  llm_readable: true,  llm_editable: false, created_at: ago(720), updated_at: ago(720) },
+  { id: 3, user_id: 1, category_id: 4, category_name: 'Work',     category_color: '#a855f7', category_icon: '💼', title: '', content: 'Feel like I\'m finally making real progress on JARVIS. The async architecture is clicking.', pinned: true,  processed: false, llm_readable: true,  llm_editable: false, created_at: ago(60),  updated_at: ago(60) },
+  { id: 4, user_id: 1, category_id: 3, category_name: 'Shopping', category_color: '#f59e0b', category_icon: '🛒', title: 'Weekly Groceries', content: '- Milk\n- Eggs\n- Coffee (dark roast)\n- Sourdough bread\n- Cherry tomatoes\n- Greek yoghurt', pinned: false, processed: false, llm_readable: true,  llm_editable: true,  created_at: ago(10),  updated_at: ago(10) },
+  { id: 5, user_id: 1, category_id: 2, category_name: 'Fitness',  category_color: '#22c55e', category_icon: '🏋️', title: 'Monday Session', content: 'Bench: 5×5 @ 85kg\nOHP: 4×8 @ 55kg\nPull-ups: 4×10\nFelt strong. Sleep was good last night.', pinned: false, processed: true,  llm_readable: true,  llm_editable: false, created_at: ago(480), updated_at: ago(480) },
+  { id: 6, user_id: 1, category_id: 2, category_name: 'Fitness',  category_color: '#22c55e', category_icon: '🏋️', title: 'Nutrition Log', content: 'Calories: ~2800\nProtein: 185g\nCarbs: 320g\nFat: 80g\nHydration: 3L', pinned: false, processed: false, llm_readable: true,  llm_editable: true,  created_at: ago(200), updated_at: ago(200) },
 ]
 
 // ── API mock handlers ─────────────────────────────────────────────────────
@@ -92,7 +101,25 @@ export const getFeed     = async () => { await delay(); return [..._feedItems].s
 export const getTasks    = async () => { await delay(); return [..._tasks].sort((a,b) => b.created_at.localeCompare(a.created_at)) }
 export const getRoutines = async () => { await delay(); return [..._routines] }
 export const getRoutine  = async (id) => { await delay(); return _routines.find(r => r.id === id) }
-export const getJournal  = async () => { await delay(); return [..._journal].sort((a,b) => b.created_at.localeCompare(a.created_at)) }
+export const getJournal  = async (params = {}) => {
+  await delay()
+  let results = [..._journal]
+  if (params.category_id != null) results = results.filter(e => e.category_id === Number(params.category_id))
+  if (params.pinned_only === 'true' || params.pinned_only === true) results = results.filter(e => e.pinned)
+  if (params.search) {
+    const q = params.search.toLowerCase()
+    results = results.filter(e => e.content.toLowerCase().includes(q) || (e.title || '').toLowerCase().includes(q))
+  }
+  const sort = params.sort || 'newest'
+  results = results.sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    if (sort === 'oldest') return a.created_at.localeCompare(b.created_at)
+    if (sort === 'title')  return (a.title || '').localeCompare(b.title || '')
+    if (sort === 'updated') return b.updated_at.localeCompare(a.updated_at)
+    return b.created_at.localeCompare(a.created_at)
+  })
+  return results
+}
 
 export const markRead = async (id) => {
   await delay(100)
@@ -187,11 +214,61 @@ export const generateRoutine = async (description) => {
 
 export const createJournal = async (payload) => {
   await delay(150)
-  const entry = { id: nextId(), user_id: 1, processed: false, created_at: new Date().toISOString(), ...payload }
+  const catId = payload.category_id ?? null
+  const cat = catId ? _categories.find(c => c.id === catId) : null
+  const entry = {
+    id: nextId(), user_id: 1, processed: false,
+    pinned: payload.pinned ?? false,
+    llm_readable: payload.llm_readable ?? true,
+    llm_editable: payload.llm_editable ?? false,
+    category_name: cat?.name ?? null,
+    category_color: cat?.color ?? null,
+    category_icon: cat?.icon ?? null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    ...payload,
+  }
   _journal.unshift(entry)
+  if (cat) cat.entry_count = (_journal.filter(e => e.category_id === catId)).length
   return entry
 }
+export const updateJournal = async (id, data) => {
+  await delay(100)
+  const idx = _journal.findIndex(e => e.id === id)
+  if (idx >= 0) {
+    const catId = data.category_id !== undefined ? data.category_id : _journal[idx].category_id
+    const cat = catId ? _categories.find(c => c.id === catId) : null
+    _journal[idx] = {
+      ..._journal[idx], ...data,
+      category_name: cat?.name ?? null,
+      category_color: cat?.color ?? null,
+      category_icon: cat?.icon ?? null,
+      updated_at: new Date().toISOString(),
+    }
+    return _journal[idx]
+  }
+  return null
+}
 export const deleteJournal = async (id) => { await delay(100); _journal = _journal.filter(e => e.id !== id) }
+
+export const getJournalCategories = async () => { await delay(); return [..._categories] }
+export const createJournalCategory = async (payload) => {
+  await delay(150)
+  const cat = { id: nextId(), user_id: 1, entry_count: 0, created_at: new Date().toISOString(), ...payload }
+  _categories.push(cat)
+  return cat
+}
+export const updateJournalCategory = async (id, data) => {
+  await delay(100)
+  const idx = _categories.findIndex(c => c.id === id)
+  if (idx >= 0) _categories[idx] = { ..._categories[idx], ...data }
+  return _categories[idx]
+}
+export const deleteJournalCategory = async (id) => {
+  await delay(100)
+  _categories = _categories.filter(c => c.id !== id)
+  _journal = _journal.map(e => e.category_id === id ? { ...e, category_id: null, category_name: null, category_color: null, category_icon: null } : e)
+}
 
 // ── Mock WebSocket simulation ─────────────────────────────────────────────
 

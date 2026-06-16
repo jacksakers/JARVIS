@@ -54,6 +54,9 @@ def _run_migrations() -> None:
             ("journal_entries", "llm_readable",  "ALTER TABLE journal_entries ADD COLUMN llm_readable INTEGER NOT NULL DEFAULT 1"),
             ("journal_entries", "llm_editable",  "ALTER TABLE journal_entries ADD COLUMN llm_editable INTEGER NOT NULL DEFAULT 0"),
             ("journal_entries", "updated_at",    "ALTER TABLE journal_entries ADD COLUMN updated_at DATETIME"),
+            # Journal categories (added with category feature)
+            ("journal_entries", "category_id",   "ALTER TABLE journal_entries ADD COLUMN category_id INTEGER DEFAULT NULL REFERENCES journal_categories(id)"),
+            ("journal_entries", "pinned",         "ALTER TABLE journal_entries ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"),
             # Task: waiting-for-user support
             ("tasks",           "question_feed_item_id", "ALTER TABLE tasks ADD COLUMN question_feed_item_id INTEGER DEFAULT NULL"),
             # Task: conversation state & chat conversation link
@@ -73,6 +76,21 @@ def _run_migrations() -> None:
         for table, column, sql in migrations:
             if not _column_exists(table, column):
                 cursor.execute(sql)
+
+        # Create journal_categories table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS journal_categories (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                name TEXT NOT NULL,
+                color TEXT NOT NULL DEFAULT '#06b6d4',
+                icon TEXT NOT NULL DEFAULT '\U0001f4dd',
+                description TEXT NOT NULL DEFAULT '',
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS ix_journal_categories_user_id ON journal_categories (user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS ix_journal_categories_name ON journal_categories (name)")
 
         # Create dev_pull_requests table if it doesn't exist
         # (SQLModel.create_all handles new installs; this covers existing DBs)

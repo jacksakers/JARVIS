@@ -72,8 +72,13 @@ export const getJournal     = (params = {}, mock) => {
   return get(`/api/v1/journal/?${qs}`, mock, Mock.getJournal)
 }
 export const createJournal  = (payload, mock) => post('/api/v1/journal/', payload, mock, () => Mock.createJournal(payload))
-export const updateJournal  = (id, payload, mock) => patch(`/api/v1/journal/${id}`, payload, mock, () => null)
+export const updateJournal  = (id, payload, mock) => patch(`/api/v1/journal/${id}`, payload, mock, () => Mock.updateJournal(id, payload))
 export const deleteJournal  = (id, mock)      => del(`/api/v1/journal/${id}`, mock, () => Mock.deleteJournal(id))
+
+export const getJournalCategories    = (mock)          => get('/api/v1/journal/categories/', mock, Mock.getJournalCategories)
+export const createJournalCategory   = (payload, mock) => post('/api/v1/journal/categories/', payload, mock, () => Mock.createJournalCategory(payload))
+export const updateJournalCategory   = (id, data, mock) => patch(`/api/v1/journal/categories/${id}`, data, mock, () => Mock.updateJournalCategory(id, data))
+export const deleteJournalCategory   = (id, mock)      => del(`/api/v1/journal/categories/${id}`, mock, () => Mock.deleteJournalCategory(id))
 
 // ── Skills ────────────────────────────────────────────────────────────────
 
