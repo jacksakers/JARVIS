@@ -1,0 +1,28 @@
+# /etc/systemd/system/jarvis-preload.service
+#
+# One-shot service that hot-loads gemma4:e4b into Ollama memory immediately
+# after the Ollama server is ready.  Because OLLAMA_KEEP_ALIVE=-1 is set on
+# the Ollama service, the model stays in VRAM until the machine is rebooted.
+
+[Unit]
+Description=JARVIS — Preload Ollama model gemma4:e4b
+After=ollama.service
+Requires=ollama.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=jack
+
+# Hit the generate API with keep_alive=-1 and an empty prompt.
+# The model loads into memory and the request returns immediately.
+ExecStart=/usr/bin/curl -sf \
+    http://localhost:11434/api/generate \
+    -d '{"model":"gemma4:e4b","prompt":"","keep_alive":-1}' \
+    -o /dev/null
+
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=jarvis.target

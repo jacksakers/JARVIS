@@ -1,0 +1,31 @@
+# /etc/systemd/system/jarvis-frontend.service
+#
+# JARVIS v3.0 — Vite dev server (exposes the React PWA on the network)
+
+[Unit]
+Description=JARVIS v3.0 — Vite frontend dev server
+After=jarvis-backend.service
+Wants=jarvis-backend.service
+
+[Service]
+Type=simple
+User=jack
+WorkingDirectory=/home/jack/src/JARVIS/3dot0/frontend
+
+# Use the local node_modules/.bin/vite so we don't depend on a global install.
+# Falls back to npx if the binary isn't present yet (first boot before npm ci).
+ExecStart=/home/jack/src/JARVIS/3dot0/frontend/node_modules/.bin/vite --host
+
+# If node_modules doesn't exist yet, run npm ci first, then start vite.
+# (Comment out ExecStart above and uncomment the two lines below if preferred.)
+# ExecStartPre=/usr/bin/npm ci --prefix /home/jack/src/JARVIS/3dot0/frontend
+# ExecStart=/home/jack/src/JARVIS/3dot0/frontend/node_modules/.bin/vite --host
+
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=jarvis.target

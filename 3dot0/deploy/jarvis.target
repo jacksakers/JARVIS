@@ -1,0 +1,19 @@
+# /etc/systemd/system/jarvis.target
+#
+# Convenience target that groups all JARVIS services.
+# Enables / disables / starts / stops everything in one command:
+#
+#   sudo systemctl start   jarvis.target
+#   sudo systemctl stop    jarvis.target
+#   sudo systemctl restart jarvis.target
+#   sudo systemctl enable  jarvis.target   (auto-start on boot)
+#   sudo systemctl disable jarvis.target
+
+[Unit]
+Description=JARVIS v3.0 — Full stack (Ollama preload + backend + frontend)
+After=ollama.service
+Requires=jarvis-backend.service jarvis-frontend.service
+Wants=jarvis-preload.service
+
+[Install]
+WantedBy=multi-user.target

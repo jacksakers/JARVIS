@@ -1,0 +1,28 @@
+# /etc/systemd/system/jarvis-backend.service
+#
+# JARVIS v3.0 — FastAPI backend (run.py via virtualenv Python)
+
+[Unit]
+Description=JARVIS v3.0 — FastAPI backend
+After=ollama.service jarvis-preload.service
+Requires=ollama.service
+Wants=jarvis-preload.service
+
+[Service]
+Type=simple
+User=jack
+WorkingDirectory=/home/jack/src/JARVIS/3dot0
+
+# Activate the venv by calling its Python directly
+ExecStart=/home/jack/src/JARVIS/3dot0/.venv/bin/python run.py
+
+# Restart automatically if the process crashes
+Restart=on-failure
+RestartSec=5
+
+# Forward stdout/stderr to journald (read with: journalctl -u jarvis-backend -f)
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=jarvis.target
