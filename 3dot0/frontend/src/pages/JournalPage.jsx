@@ -19,7 +19,7 @@ const SORT_OPTIONS = [
   { value: 'newest',  label: 'Newest first' },
   { value: 'oldest',  label: 'Oldest first' },
   { value: 'updated', label: 'Recently edited' },
-  { value: 'title',   label: 'Title Aâ€“Z' },
+  { value: 'title',   label: 'Title A -> Z' },
 ]
 
 const PRESET_COLORS = [
@@ -43,7 +43,7 @@ function CategoryBadge({ name, color, icon, className }) {
 //  CategoryManagerModal 
 
 function CategoryManagerModal({ categories, onClose, onChange, mockMode }) {
-  const [form,    setForm]    = useState({ name: '', color: PRESET_COLORS[0], icon: 'ðŸ“', description: '' })
+  const [form,    setForm]    = useState({ name: '', color: PRESET_COLORS[0], icon: '📝', description: '' })
   const [editing, setEditing] = useState(null)
   const [saving,  setSaving]  = useState(false)
   const [deleting, setDeleting] = useState(null)
@@ -59,7 +59,7 @@ function CategoryManagerModal({ categories, onClose, onChange, mockMode }) {
       const updated = await API.updateJournalCategory(editing, form, mockMode)
       onChange('update', updated)
       setEditing(null)
-      setForm({ name: '', color: PRESET_COLORS[0], icon: 'ðŸ“', description: '' })
+      setForm({ name: '', color: PRESET_COLORS[0], icon: '📝', description: '' })
     } finally { setSaving(false) }
   }
 
@@ -69,7 +69,7 @@ function CategoryManagerModal({ categories, onClose, onChange, mockMode }) {
     try {
       const created = await API.createJournalCategory(form, mockMode)
       onChange('create', created)
-      setForm({ name: '', color: PRESET_COLORS[0], icon: 'ðŸ“', description: '' })
+      setForm({ name: '', color: PRESET_COLORS[0], icon: '📝', description: '' })
     } finally { setSaving(false) }
   }
 
@@ -151,7 +151,7 @@ function CategoryFormFields({ form, setForm }) {
           value={form.icon}
           onChange={e => setForm(f => ({ ...f, icon: e.target.value }))}
           className="glass rounded-lg px-2 py-1.5 text-sm text-jarvis-text outline-none w-14 text-center"
-          placeholder="ðŸ“"
+          placeholder="📝"
           maxLength={4}
         />
         <input
@@ -225,7 +225,7 @@ function EntrySettings({ entry, categories, onChange, onClose, mockMode }) {
           <input
             value={form.title}
             onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            placeholder="e.g. Shopping List, Project Ideasâ€¦"
+            placeholder="e.g. Shopping List, Project Ideas..."
             className="glass w-full rounded-lg px-3 py-2 text-sm text-jarvis-text outline-none focus:border-jarvis-cyan/50"
           />
         </div>
@@ -236,7 +236,7 @@ function EntrySettings({ entry, categories, onChange, onClose, mockMode }) {
             onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}
             className="glass w-full rounded-lg px-3 py-2 text-sm text-jarvis-text outline-none focus:border-jarvis-cyan/50 bg-jarvis-surface"
           >
-            <option value="">â€” No category â€”</option>
+            <option value="">— No category —</option>
             {categories.map(c => (
               <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
             ))}
@@ -337,7 +337,7 @@ function JournalEntryCard({ entry, categories, onDelete, onChange, mockMode }) {
                 {entry.created_at ? formatDistanceToNow(parseUTC(entry.created_at), { addSuffix: true }) : ''}
               </span>
               {entry.updated_at && entry.updated_at !== entry.created_at && (
-                <span className="text-[10px] text-jarvis-muted/60">Â· edited</span>
+                <span className="text-[10px] text-jarvis-muted/60">· edited</span>
               )}
               {entry.processed && <Badge type="done" className="text-[10px]">analysed</Badge>}
               {flags.map(({ icon: Icon, label, color }) => (
@@ -415,8 +415,8 @@ function CategorySidebar({ categories, selected, onSelect, entryCounts }) {
 
   return (
     <div className="space-y-1">
-      {navItem('all',    'ðŸ“‹', 'All Entries', total,  null)}
-      {navItem('pinned', 'ðŸ“Œ', 'Pinned',      pinned, null)}
+      {navItem('all',    '📝', 'All Entries', total,  null)}
+      {navItem('pinned', '📌', 'Pinned',      pinned, null)}
       {categories.length > 0 && (
         <div className="pt-2 pb-1">
           <p className="text-[9px] font-semibold uppercase tracking-widest text-jarvis-muted/50 px-3 mb-1">Categories</p>
@@ -604,7 +604,7 @@ export default function JournalPage() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={`Search ${activeLabel.toLowerCase()}â€¦`}
+                placeholder={`Search ${activeLabel.toLowerCase()}...`}
                 className="glass w-full rounded-lg pl-9 pr-8 py-2 text-sm text-jarvis-text placeholder:text-jarvis-muted/50 outline-none focus:border-jarvis-cyan/50"
               />
               {search && (
@@ -680,7 +680,7 @@ export default function JournalPage() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save() }}
-              placeholder="Capture a thought, reminder, or noteâ€¦ (Ctrl+Enter to save)"
+              placeholder="Capture a thought, reminder, or note... (Ctrl+Enter to save)"
               className="min-h-[80px] mb-3"
             />
             <button
