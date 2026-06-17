@@ -155,7 +155,7 @@ class DevSearchReplaceInput(BaseModel):
     )
     replace_block: str = Field(
         description=(
-            "The new code to replace the found block with. "
+            "The new code INCLUDING YOUR CHANGES to replace the found block with. "
             "The backend will auto-align indentation to match the file if your code is left-aligned."
         )
     )

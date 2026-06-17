@@ -33,6 +33,8 @@ from app.database import session_scope
 from app.models import Conversation, ConversationMessage, FeedItem, FeedItemType, Routine, Task, TaskStatus
 from app.providers.ollama_provider import OllamaProvider
 from app.worker.connection_manager import manager
+from app.providers.gemini_provider import GeminiProvider 
+from app.worker.connection_manager import manager
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +60,23 @@ class BackgroundWorker:
         self._registry.discover_skills()
 
         llm_cfg = self._cfg.get("llm", {})
-        self._llm = OllamaProvider(
-            model=llm_cfg.get("model", "gemma4:e4b"),
-            base_url=llm_cfg.get("ollama_url", "http://localhost:11434"),
-            options=llm_cfg.get("options", {}),
-        )
+
+        # 2. Determine which provider to use from your config dictionary
+        provider_type = llm_cfg.get("provider", "ollama").lower()
+
+        if provider_type == "gemini":
+            self._llm = GeminiProvider(
+                model=llm_cfg.get("model", "gemini-2.5-flash"),
+                # api_key=llm_cfg.get("api_key"),  # Optional: can also rely on GEMINI_API_KEY env var
+                options=llm_cfg.get("options", {}),
+            )
+        else:
+            # Fall back to default Ollama setup
+            self._llm = OllamaProvider(
+                model=llm_cfg.get("model", "gemma4:e4b"),
+                base_url=llm_cfg.get("ollama_url", "http://localhost:11434"),
+                options=llm_cfg.get("options", {}),
+            )
 
         worker_cfg = self._cfg.get("worker", {})
         self._poll_interval = worker_cfg.get("poll_interval_seconds", 2)
