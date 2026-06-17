@@ -676,7 +676,10 @@ class DevSearchReplace(BaseSkill):
             ]
 
         replacement = "".join(replace_lines)
-        if replacement and not replacement.endswith("\n"):
+        # Normalize trailing newlines: strip excess blank lines from LLM output,
+        # then ensure exactly one trailing newline (unless it's a deletion).
+        replacement = replacement.rstrip("\n")
+        if replacement:
             replacement += "\n"
 
         before = "".join(file_lines[:start_idx])
