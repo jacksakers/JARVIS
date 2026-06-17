@@ -4,7 +4,7 @@ from typing import Any, Dict, Generator, List, Optional
 from google import genai
 from google.genai import types
 
-from app.core.llm_provider import BaseLLM, StreamChunk, ToolCall
+from app.core.llm_provider import BaseLLM, StreamChunk, TokenUsage, ToolCall
 
 
 class GeminiProvider(BaseLLM):
@@ -102,6 +102,7 @@ class GeminiProvider(BaseLLM):
         """Helper to extract text and native tool calls from a Gemini response/chunk."""
         content = ""
         tool_calls = None
+        usage = None
 
         if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
             for part in response.candidates[0].content.parts:
@@ -129,7 +130,16 @@ class GeminiProvider(BaseLLM):
                         )
                     )
 
-        return StreamChunk(content=content, tool_calls=tool_calls, done=done)
+        # Capture token usage from usage_metadata (populated on final/non-streaming responses)
+        meta = getattr(response, "usage_metadata", None)
+        if meta is not None:
+            usage = TokenUsage(
+                prompt_tokens=getattr(meta, "prompt_token_count", 0) or 0,
+                completion_tokens=getattr(meta, "candidates_token_count", 0) or 0,
+                thinking_tokens=getattr(meta, "thoughts_token_count", 0) or 0,
+            )
+
+        return StreamChunk(content=content, tool_calls=tool_calls, done=done, usage=usage)
 
     # ── BaseLLM interface ─────────────────────────────────────────────────────
 

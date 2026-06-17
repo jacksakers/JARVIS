@@ -174,6 +174,10 @@ class Task(SQLModel, table=True):
     allowed_skill_names_override: Optional[str] = Field(default=None)
     # LLM model ID to use (None = use routine's model, or config default)
     model_id: Optional[str] = Field(default=None)
+    # Token usage (Gemini only; 0 for local models)
+    tokens_prompt: int = Field(default=0)
+    tokens_completion: int = Field(default=0)
+    tokens_thinking: int = Field(default=0)
     # JSON-serialised routine generation config (if this is a routine generation task)
     # Format: {"description": "user description"}
     routine_generation_config: Optional[str] = Field(default=None)
@@ -415,6 +419,9 @@ class TaskRead(SQLModel):
     error_message: Optional[str]
     question_feed_item_id: Optional[int]
     model_id: Optional[str]
+    tokens_prompt: int = 0
+    tokens_completion: int = 0
+    tokens_thinking: int = 0
     created_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]

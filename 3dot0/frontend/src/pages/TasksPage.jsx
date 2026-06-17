@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ListTodo, X, RefreshCw, Clock, Wrench, AlertCircle, CheckCircle2, CircleDot, Loader2, Ban, Trash2 } from 'lucide-react'
+import { ListTodo, X, RefreshCw, Clock, Wrench, AlertCircle, CheckCircle2, CircleDot, Loader2, Ban, Trash2, Coins } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 const parseUTC = s => s ? new Date(s.endsWith('Z') || s.includes('+') ? s : s + 'Z') : null
 
@@ -18,6 +18,33 @@ const STATUS_ICON = {
   failed:  <AlertCircle  size={13} className="text-jarvis-red" />,
 }
 
+// Pricing: USD per 1M tokens (input / output). Keep in sync with model_registry.py.
+const MODEL_PRICING = {
+  'gemini-2.5-flash':        { input: 0.30, output: 2.50 },
+  'gemini-2.5-pro':          { input: 1.25, output: 10.00 },
+  'gemini-3-flash-preview':  { input: 0.30, output: 2.50 },
+  'gemini-3.5-flash':        { input: 0.30, output: 2.50 },
+}
+
+function computeCost(modelId, promptTokens, completionTokens, thinkingTokens) {
+  const pricing = MODEL_PRICING[modelId]
+  if (!pricing) return null
+  const inCost  = (promptTokens  / 1_000_000) * pricing.input
+  const outCost = ((completionTokens + thinkingTokens) / 1_000_000) * pricing.output
+  return inCost + outCost
+}
+
+function fmtTokens(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
+  return String(n)
+}
+
+function fmtCost(usd) {
+  if (usd < 0.0001) return '<$0.0001'
+  if (usd < 0.01)   return '$' + usd.toFixed(4)
+  return '$' + usd.toFixed(3)
+}
+
 function TaskRow({ task, onCancel, onRetry }) {
   const [expanded, setExpanded] = useState(false)
   const patchedStatus = useStore(s => s.taskPatches[task.id]?.status ?? task.status)
@@ -25,6 +52,11 @@ function TaskRow({ task, onCancel, onRetry }) {
 
   const duration = task.completed_at && task.started_at
     ? ((new Date(task.completed_at) - new Date(task.started_at)) / 1000).toFixed(1) + 's'
+    : null
+
+  const hasTokens = patchedStatus === 'done' && task.tokens_prompt > 0
+  const estimatedCost = hasTokens
+    ? computeCost(task.model_id, task.tokens_prompt, task.tokens_completion, task.tokens_thinking)
     : null
 
   return (
@@ -45,6 +77,13 @@ function TaskRow({ task, onCancel, onRetry }) {
               {task.created_at && (
                 <span className="text-[10px] text-jarvis-muted">
                   {formatDistanceToNow(parseUTC(task.created_at), { addSuffix: true })}
+                </span>
+              )}
+              {hasTokens && (
+                <span className="text-[10px] text-jarvis-muted font-mono flex items-center gap-1">
+                  <Coins size={9} className="text-jarvis-amber/70" />
+                  ↑{fmtTokens(task.tokens_prompt)} ↓{fmtTokens(task.tokens_completion + task.tokens_thinking)}
+                  {estimatedCost != null && <span className="text-jarvis-amber/80 ml-0.5">· {fmtCost(estimatedCost)}</span>}
                 </span>
               )}
             </div>
@@ -78,6 +117,28 @@ function TaskRow({ task, onCancel, onRetry }) {
                   {task.started_at  && <span>Started:   {format(new Date(task.started_at), 'MMM d, HH:mm:ss')}</span>}
                   {task.completed_at && <span>Completed: {format(new Date(task.completed_at), 'MMM d, HH:mm:ss')}</span>}
                 </div>
+                {task.model_id && (
+                  <div className="text-jarvis-cyan/60">Model: {task.model_id}</div>
+                )}
+                {hasTokens && (
+                  <div className="bg-jarvis-surface/40 rounded p-2 border border-jarvis-border space-y-1">
+                    <div className="flex items-center gap-1.5 text-jarvis-amber/80 mb-1">
+                      <Coins size={10} /> Token usage
+                    </div>
+                    <div className="flex gap-4 flex-wrap">
+                      <span>Prompt:     {task.tokens_prompt.toLocaleString()}</span>
+                      <span>Completion: {task.tokens_completion.toLocaleString()}</span>
+                      {task.tokens_thinking > 0 && <span>Thinking: {task.tokens_thinking.toLocaleString()}</span>}
+                      <span>Total: {(task.tokens_prompt + task.tokens_completion + task.tokens_thinking).toLocaleString()}</span>
+                    </div>
+                    {estimatedCost != null && (
+                      <div className="text-jarvis-amber/80">Est. cost: {fmtCost(estimatedCost)}</div>
+                    )}
+                    {estimatedCost == null && task.model_id && (
+                      <div className="text-jarvis-muted/60">Cost: free (local model)</div>
+                    )}
+                  </div>
+                )}
                 {task.error_message && (
                   <div className="text-jarvis-red bg-jarvis-red/5 rounded p-2 border border-jarvis-red/20">
                     {task.error_message}

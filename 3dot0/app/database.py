@@ -75,6 +75,10 @@ def _run_migrations() -> None:
             ("tasks",          "model_id", "ALTER TABLE tasks ADD COLUMN model_id TEXT DEFAULT NULL"),
             ("conversations",  "model_id", "ALTER TABLE conversations ADD COLUMN model_id TEXT DEFAULT NULL"),
             ("routines",       "model_id", "ALTER TABLE routines ADD COLUMN model_id TEXT DEFAULT NULL"),
+            # Token usage tracking
+            ("tasks", "tokens_prompt",     "ALTER TABLE tasks ADD COLUMN tokens_prompt INTEGER NOT NULL DEFAULT 0"),
+            ("tasks", "tokens_completion", "ALTER TABLE tasks ADD COLUMN tokens_completion INTEGER NOT NULL DEFAULT 0"),
+            ("tasks", "tokens_thinking",   "ALTER TABLE tasks ADD COLUMN tokens_thinking INTEGER NOT NULL DEFAULT 0"),
         ]
 
         for table, column, sql in migrations:

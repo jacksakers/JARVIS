@@ -15,7 +15,7 @@ Key differences from v2.0:
 import threading
 from typing import Any, Callable, Dict, List, Optional
 
-from app.core.llm_provider import BaseLLM, StreamChunk, ToolCall
+from app.core.llm_provider import BaseLLM, StreamChunk, TokenUsage, ToolCall
 from app.core.memory_manager import IntelligentMemoryManager
 from app.core.tool_registry import ToolRegistry
 
@@ -68,6 +68,8 @@ class AgentLoop:
         self.memory = memory
         self.on_event = on_event or (lambda _t, _d: None)
         self.stop_event = stop_event or threading.Event()
+        # Accumulated token usage across all LLM calls in this turn
+        self._accumulated_usage: TokenUsage = TokenUsage()
 
     # ── Public entry point ────────────────────────────────────────────────────
 
@@ -138,6 +140,7 @@ class AgentLoop:
                 if self.memory.should_summarize():
                     self.memory.summarize(self.llm)
 
+                self._emit_token_usage()
                 return content
 
             # ── Parallel tool execution ───────────────────────────────────
@@ -171,6 +174,7 @@ class AgentLoop:
         final_content, _ = self._stream_response(summary_msgs, None)
         self.memory.append_assistant(final_content or content or "Iteration limit reached.")
         self.memory.close_turn()
+        self._emit_token_usage()
         return final_content or content or "Iteration limit reached."
 
     # ── LLM call ─────────────────────────────────────────────────────────────
@@ -195,6 +199,8 @@ class AgentLoop:
             # Non-streaming: reliable tool-call extraction
             try:
                 chunk = self.llm.chat(messages, tools=tools)
+                if chunk.usage:
+                    self._accumulated_usage = self._accumulated_usage + chunk.usage
                 if chunk.tool_calls:
                     for tc in chunk.tool_calls:
                         self.on_event("tool_call", {"name": tc.name, "arguments": tc.arguments})
@@ -211,9 +217,24 @@ class AgentLoop:
                         break
                     if chunk.content:
                         content += chunk.content
+                    if chunk.usage:
+                        self._accumulated_usage = self._accumulated_usage + chunk.usage
             except Exception as exc:
                 self.on_event("error", {"message": str(exc)})
             return content, None
+
+    # ── Token usage ───────────────────────────────────────────────────────────
+
+    def _emit_token_usage(self) -> None:
+        """Emit accumulated token usage as a 'token_usage' event."""
+        u = self._accumulated_usage
+        if u.total_tokens > 0:
+            self.on_event("token_usage", {
+                "prompt_tokens": u.prompt_tokens,
+                "completion_tokens": u.completion_tokens,
+                "thinking_tokens": u.thinking_tokens,
+                "total_tokens": u.total_tokens,
+            })
 
     # ── Tool execution ────────────────────────────────────────────────────────
 

@@ -187,7 +187,7 @@ class BackgroundWorker:
             if task_gen_config:
                 self._process_routine_generation(task_id, task_user_id, task_gen_config, task_model_id)
             else:
-                result_md, memory = self._run_agent(
+                result_md, memory, token_usage = self._run_agent(
                     task_id=task_id,
                     prompt=task_prompt,
                     routine_id=task_routine_id,
@@ -203,6 +203,7 @@ class BackgroundWorker:
                     routine_id=task_routine_id,
                     conversation_id=task_conversation_id,
                     content_markdown=result_md or "",
+                    token_usage=token_usage,
                 )
         except UserInputRequired as exc:
             self._mark_waiting(task_id, exc.feed_item_id, exc.memory)
@@ -304,7 +305,12 @@ class BackgroundWorker:
                     if prior_msgs:
                         logger.info("Task %d: loaded %d prior messages as context.", task_id, len(prior_msgs))
 
+        # Capture token usage emitted by the agent loop
+        _token_usage: Dict[str, int] = {}
+
         def on_event(event_type: str, data: Dict[str, Any]) -> None:
+            if event_type == "token_usage":
+                _token_usage.update(data)
             manager.broadcast_from_thread(event_type, {"task_id": task_id, **data})
 
         # Set thread-local task_id so skills like ask_user can reference it
@@ -328,7 +334,7 @@ class BackgroundWorker:
         max_iters = 20 if is_dev_task else self._max_tool_iterations
 
         result = agent.run_turn(prompt, allowed_skill_names=allowed_skills, max_iterations=max_iters)
-        return result, memory
+        return result, memory, _token_usage
 
     def _process_routine_generation(
         self,
@@ -457,6 +463,7 @@ class BackgroundWorker:
         routine_id: Optional[int],
         content_markdown: str,
         conversation_id: Optional[int] = None,
+        token_usage: Optional[Dict[str, int]] = None,
     ) -> None:
         """Render markdown, create a FeedItem, update conversation if needed, and mark the task done."""
         content_html = render_markdown(content_markdown)
@@ -480,6 +487,10 @@ class BackgroundWorker:
             if task:
                 task.status = TaskStatus.done
                 task.completed_at = datetime.now(timezone.utc)
+                if token_usage:
+                    task.tokens_prompt = token_usage.get("prompt_tokens", 0)
+                    task.tokens_completion = token_usage.get("completion_tokens", 0)
+                    task.tokens_thinking = token_usage.get("thinking_tokens", 0)
                 session.add(task)
 
             # Update the pending assistant ConversationMessage if this is a chat task
@@ -503,7 +514,12 @@ class BackgroundWorker:
 
         manager.broadcast_from_thread(
             "task_done",
-            {"task_id": task_id, "feed_item_id": feed_item_id, "title": title},
+            {
+                "task_id": task_id,
+                "feed_item_id": feed_item_id,
+                "title": title,
+                **({"token_usage": token_usage} if token_usage else {}),
+            },
         )
         manager.broadcast_from_thread(
             "feed_new",
