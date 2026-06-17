@@ -17,19 +17,10 @@ AVAILABLE_MODELS: List[Dict[str, Any]] = [
         "badge": "Local",
     },
     {
-        "id": "gemini-2.0-flash",
-        "name": "Gemini 2.0 Flash",
-        "provider": "gemini",
-        "description": "Google's fast, capable model. Free tier available with rate limits.",
-        "free": True,
-        "thinking": False,
-        "badge": "Free",
-    },
-    {
         "id": "gemini-2.5-flash",
         "name": "Gemini 2.5 Flash",
         "provider": "gemini",
-        "description": "Thinking model with excellent tool-calling. Great for coding and complex reasoning. Paid.",
+        "description": "Quick thinking model with tool-calling. Paid.",
         "free": False,
         "thinking": True,
         "badge": "Paid",
@@ -38,11 +29,29 @@ AVAILABLE_MODELS: List[Dict[str, Any]] = [
         "id": "gemini-2.5-pro",
         "name": "Gemini 2.5 Pro",
         "provider": "gemini",
-        "description": "Most capable thinking model. Best for complex multi-step coding tasks. Paid.",
+        "description": "Very capable thinking model. Good for complex multi-step coding tasks. Paid.",
         "free": False,
         "thinking": True,
         "badge": "Paid",
     },
+    {
+        "id": "gemini-3-flash-preview",
+        "name": "Gemini 3 Flash Preview",
+        "provider": "gemini",
+        "description": "Even more capable quick thinking model. Suitable for testing new features. Paid.",
+        "free": False,
+        "thinking": True,
+        "badge": "Paid",
+    },
+    {
+        "id": "gemini-3.5-flash",
+        "name": "Gemini 3.5 Flash",
+        "provider": "gemini",
+        "description": "The next-generation quick thinking model. Best for testing the latest capabilities. Paid.",
+        "free": False,
+        "thinking": True,
+        "badge": "Paid",
+    }
 ]
 
 # Model IDs that require thought signature handling
