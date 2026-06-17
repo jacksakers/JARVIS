@@ -21,6 +21,7 @@ import json
 import logging
 import threading
 import time
+import base64
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -37,6 +38,25 @@ from app.worker.connection_manager import manager
 from app.providers.gemini_provider import GeminiProvider
 
 logger = logging.getLogger(__name__)
+
+
+class _BytesEncoder(json.JSONEncoder):
+    """JSON encoder that converts bytes to a base64 wrapper so Gemini's
+    thought_signature (opaque bytes) can be stored in the Task.conversation_state
+    column and restored when a waiting task is resumed."""
+
+    def default(self, obj):
+        if isinstance(obj, bytes):
+            return {"__b64bytes__": base64.b64encode(obj).decode("ascii")}
+        return super().default(obj)
+
+
+def _bytes_decoder(obj: dict):
+    """Paired object_hook for _BytesEncoder: converts base64 wrappers back to bytes."""
+    if "__b64bytes__" in obj:
+        return base64.b64decode(obj["__b64bytes__"])
+    return obj
+
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are JARVIS, a highly capable and efficient AI assistant. "
@@ -257,7 +277,7 @@ class BackgroundWorker:
         # Restore conversation state if this task was paused (ask_user resume)
         if saved_state:
             try:
-                state_dict = json.loads(saved_state)
+                state_dict = json.loads(saved_state, object_hook=_bytes_decoder)
                 memory = IntelligentMemoryManager.from_dict(
                     state_dict,
                     max_recent_turns=self._max_recent_turns,
@@ -281,11 +301,21 @@ class BackgroundWorker:
             if conversation_id:
                 from sqlmodel import select
                 with session_scope() as session:
+                    from sqlmodel import or_, col as _col
                     prior_msgs = session.exec(
                         select(ConversationMessage)
                         .where(ConversationMessage.conversation_id == conversation_id)
                         .where(ConversationMessage.content != "")
-                        .where(ConversationMessage.task_id != task_id)
+                        # Include messages that belong to OTHER tasks (prior turns) OR have no
+                        # task_id at all (user messages created before the fix that sets task_id).
+                        # Plain `!= task_id` excludes NULLs in SQL (NULL != X = NULL = falsy),
+                        # which previously hid all user messages and broke conversation history.
+                        .where(
+                            or_(
+                                _col(ConversationMessage.task_id).is_(None),
+                                ConversationMessage.task_id != task_id,
+                            )
+                        )
                         .order_by(ConversationMessage.created_at.asc())
                     ).all()
                     # Inject prior messages as completed turns in memory
@@ -549,7 +579,7 @@ class BackgroundWorker:
         state_json = None
         if memory:
             try:
-                state_json = json.dumps(memory.to_dict())
+                state_json = json.dumps(memory.to_dict(), cls=_BytesEncoder)
             except Exception as exc:
                 logger.warning("Could not serialize memory state for task %d: %s", task_id, exc)
 

@@ -191,6 +191,12 @@ def send_message(
     session.flush()
     task_id = task.id
 
+    # Associate the user message with this task so the history loader
+    # can correctly exclude it when loading prior context (SQL NULL != X
+    # is NULL/falsy, so un-tagged messages would be invisible to the query).
+    user_msg.task_id = task_id
+    session.add(user_msg)
+
     # Create a pending assistant message (content filled in by worker)
     asst_msg = ConversationMessage(
         conversation_id=conv_id,

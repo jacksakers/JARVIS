@@ -30,9 +30,11 @@ SENTINEL_WAITING = "__WAITING_FOR_USER__:"
 
 class UserInputRequired(Exception):
     """Raised when the ask_user skill pauses execution pending a user reply."""
-    def __init__(self, feed_item_id: int, memory=None) -> None:
+    def __init__(self, feed_item_id: int, memory=None, tool_call_id: Optional[str] = None, tool_name: str = "ask_user") -> None:
         self.feed_item_id = feed_item_id
         self.memory = memory  # IntelligentMemoryManager instance to serialize
+        self.tool_call_id = tool_call_id  # Gemini function call ID — echoed in placeholder result
+        self.tool_name = tool_name
         super().__init__(f"Waiting for user reply on feed item {feed_item_id}")
 
 
@@ -150,10 +152,16 @@ class AgentLoop:
             except UserInputRequired as exc:
                 # Persist the pending tool call and a placeholder result to memory
                 # so that when the task resumes the LLM has full context of the exchange.
-                self.memory.append_tool_turn(
-                    assistant_msg,
-                    [{"role": "tool", "content": "[Awaiting your response]", "name": "ask_user"}],
-                )
+                placeholder: Dict[str, Any] = {
+                    "role": "tool",
+                    "content": "[Awaiting your response]",
+                    "name": exc.tool_name,
+                }
+                # Gemini uses a function-call ID to correlate tool responses with calls;
+                # include it so the model can correctly match the placeholder on resume.
+                if exc.tool_call_id:
+                    placeholder["tool_call_id"] = exc.tool_call_id
+                self.memory.append_tool_turn(assistant_msg, [placeholder])
                 self.memory.close_turn()
                 raise
 
@@ -259,7 +267,12 @@ class AgentLoop:
             # Detect ask_user sentinel — pause the agent loop
             if result.startswith(SENTINEL_WAITING):
                 feed_item_id = int(result[len(SENTINEL_WAITING):])
-                raise UserInputRequired(feed_item_id, memory=self.memory)
+                raise UserInputRequired(
+                    feed_item_id,
+                    memory=self.memory,
+                    tool_call_id=tc.id,
+                    tool_name=tc.name,
+                )
 
             self.on_event("tool_result", {"name": tc.name, "result": result[:300]})
 
