@@ -471,10 +471,16 @@ export default function ChatPage() {
         <div className="shrink-0 px-4 py-3 border-t border-jarvis-border">
           {/* Tool picker popover */}
           {toolPickerOpen && availableSkills.length > 0 && (
-            <div className="mb-2 glass rounded-xl border border-jarvis-border p-3">
-              <div className="flex items-center justify-between mb-2">
+            <div className="mb-2 glass rounded-xl border border-jarvis-border p-3 max-h-[40vh] overflow-y-auto overscroll-contain shadow-2xl">
+              <div className="flex items-center justify-between mb-3 sticky top-0 bg-jarvis-bg/80 backdrop-blur-sm pb-2 z-10">
                 <span className="text-xs font-semibold text-jarvis-muted uppercase tracking-wider">Tools for this message</span>
-                <button onClick={() => { setSelectedTools(null); setToolPickerOpen(false) }} className="text-xs text-jarvis-muted hover:text-jarvis-cyan">Reset (all)</button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setSelectedTools(null)} className="text-[10px] px-2 py-0.5 rounded bg-jarvis-surface border border-jarvis-border hover:border-jarvis-cyan/50 text-jarvis-muted hover:text-jarvis-cyan transition-colors">All</button>
+                  <button onClick={() => setSelectedTools([])} className="text-[10px] px-2 py-0.5 rounded bg-jarvis-surface border border-jarvis-border hover:border-jarvis-cyan/50 text-jarvis-muted hover:text-jarvis-cyan transition-colors">None</button>
+                  <button onClick={() => setToolPickerOpen(false)} className="p-1 rounded-md hover:bg-jarvis-surface text-jarvis-muted hover:text-white transition-colors ml-1">
+                    <X size={14} />
+                  </button>
+                </div>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {availableSkills.map(name => {
