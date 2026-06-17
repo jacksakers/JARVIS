@@ -144,8 +144,11 @@ def create_llm(model_id: Optional[str], cfg: dict):
         model_id = llm_cfg.get("model", "gemma4:e4b")
 
     if is_gemini_model(model_id):
+        # Prefer explicit key in config; fall back to GEMINI_API_KEY env var (read by genai.Client)
+        api_key = llm_cfg.get("gemini_api_key") or None
         return GeminiProvider(
             model=model_id,
+            api_key=api_key,
             options=llm_cfg.get("gemini_options", {}),
         )
     else:
