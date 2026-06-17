@@ -85,11 +85,12 @@ class GeminiProvider(BaseLLM):
                 except Exception:
                     response_dict = {"result": content}
 
-                kwargs = {"name": name, "response": response_dict}
-                if "tool_call_id" in msg:
-                    kwargs["id"] = msg["tool_call_id"]
-                    
-                parts.append(types.Part.from_function_response(**kwargs))
+                func_response = types.FunctionResponse(
+                    name=name,
+                    response=response_dict,
+                    **({"id": msg["tool_call_id"]} if "tool_call_id" in msg else {}),
+                )
+                parts.append(types.Part(function_response=func_response))
                 # Gemini expects tool responses to act as user inputs resolving the model's request
                 contents.append(types.Content(role="user", parts=parts))
 
