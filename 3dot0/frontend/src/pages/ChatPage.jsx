@@ -10,6 +10,7 @@ import { formatDistanceToNow } from 'date-fns'
 
 const parseUTC = s => s ? new Date(s.endsWith('Z') || s.includes('+') ? s : s + 'Z') : null
 import { Button, EmptyState, Spinner } from '../components/ui'
+import ModelPicker from '../components/ModelPicker'
 import useStore from '../store'
 import * as API from '../api'
 import clsx from 'clsx'
@@ -196,6 +197,7 @@ export default function ChatPage() {
   const [availableSkills, setAvailableSkills] = useState([])
   const [selectedTools, setSelectedTools] = useState(null)  // null = all tools
   const [toolPickerOpen, setToolPickerOpen] = useState(false)
+  const [selectedModelId, setSelectedModelId] = useState(null)  // null = conversation/user default
 
   const bottomRef      = useRef(null)
   const inputRef       = useRef(null)
@@ -226,6 +228,9 @@ export default function ChatPage() {
     setActiveConvId(convId)
     setSidebarOpen(false)
     setLoadingMsgs(true)
+    // Sync the model picker to the conversation's stored model
+    const conv = conversations.find(c => c.id === convId)
+    setSelectedModelId(conv?.model_id ?? null)
     try {
       const msgs = await API.getConversationMessages(convId, mockMode)
       setMessages(msgs.map(m => ({ ...m, toolEvents: tryParseJson(m.tool_events) })))
@@ -235,7 +240,7 @@ export default function ChatPage() {
 
   const newConversation = async () => {
     try {
-      const conv = await API.createConversation({ title: 'New chat' }, mockMode)
+      const conv = await API.createConversation({ title: 'New chat', model_id: selectedModelId }, mockMode)
       setConversations(prev => [conv, ...prev])
       setActiveConvId(conv.id)
       setMessages([])
@@ -259,6 +264,16 @@ export default function ChatPage() {
       await API.updateConversation(convId, { title }, mockMode)
       setConversations(prev => prev.map(c => c.id === convId ? { ...c, title } : c))
     } catch (e) { console.error(e) }
+  }
+
+  const changeConversationModel = async (modelId) => {
+    setSelectedModelId(modelId)
+    if (activeConvId) {
+      try {
+        const updated = await API.updateConversation(activeConvId, { model_id: modelId }, mockMode)
+        setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, model_id: modelId } : c))
+      } catch (e) { console.error(e) }
+    }
   }
 
   useEffect(() => {
@@ -315,7 +330,7 @@ export default function ChatPage() {
     let convId = activeConvId
     if (!convId) {
       try {
-        const conv = await API.createConversation({ title: text.slice(0, 50) }, mockMode)
+        const conv = await API.createConversation({ title: text.slice(0, 50), model_id: selectedModelId }, mockMode)
         convId = conv.id
         setConversations(prev => [conv, ...prev])
         setActiveConvId(conv.id)
@@ -326,7 +341,7 @@ export default function ChatPage() {
     setMessages(prev => [...prev, { id: tempId, role: 'user', content: text, created_at: new Date().toISOString() }])
 
     try {
-      const res = await API.sendConversationMessage(convId, text, selectedTools, mockMode)
+      const res = await API.sendConversationMessage(convId, text, selectedTools, mockMode, selectedModelId)
       const asstId = res?.assistant_message?.id ?? `asst-${Date.now()}`
       pendingIdRef.current = asstId
       setMessages(prev => [
@@ -430,11 +445,11 @@ export default function ChatPage() {
           >
             {PERSONAS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
-          {activeConv && (
-            <span className="text-xs text-jarvis-muted truncate max-w-[160px] hidden sm:block">
-              {activeConv.title}
-            </span>
-          )}
+          <ModelPicker
+            value={selectedModelId}
+            onChange={changeConversationModel}
+            placeholder="Default model"
+          />
           <button onClick={newConversation} className="text-jarvis-muted hover:text-jarvis-cyan transition-colors" title="New chat">
             <Plus size={14} />
           </button>

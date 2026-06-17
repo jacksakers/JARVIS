@@ -8,6 +8,10 @@ class ToolCall:
     """Provider-agnostic representation of a single tool call from the LLM."""
     name: str
     arguments: dict
+    # Gemini-specific: function call ID for correlating responses with thought signatures
+    id: Optional[str] = field(default=None)
+    # Gemini thinking models: opaque bytes that must be echoed back verbatim
+    thought_signature: Optional[bytes] = field(default=None)
 
 
 @dataclass

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { GlassPanel, Button, Badge, StatusDot, Modal, Textarea, Input, Toggle, EmptyState, Spinner, SectionHeader, IconButton } from '../components/ui'
 import CronBuilder, { humanReadable } from '../components/CronBuilder'
+import ModelPicker from '../components/ModelPicker'
 import useStore from '../store'
 import * as API from '../api'
 import clsx from 'clsx'
@@ -121,6 +122,7 @@ function RoutineEditor({ routine, skills, onSave, onClose }) {
     trigger_value:      routine?.trigger_value ? cronUTCToEastern(routine.trigger_value) : '0 9 * * *',
     system_prompt:      routine?.system_prompt      ?? '',
     allowed_skill_names:routine?.allowed_skill_names ?? '[]',
+    model_id:           routine?.model_id           ?? null,
     active:             routine?.active              ?? true,
   })
   const [saving, setSaving] = useState(false)
@@ -293,11 +295,24 @@ function RoutineEditor({ routine, skills, onSave, onClose }) {
 
         {/* ── Advanced tab ── */}
         {tab === 'advanced' && (
-          <Toggle
-            checked={form.active}
-            onChange={set('active')}
-            label="Routine is active"
-          />
+          <div className="space-y-5">
+            <div>
+              <label className="text-xs font-medium text-jarvis-muted uppercase tracking-wider block mb-2">LLM Model</label>
+              <ModelPicker
+                value={form.model_id}
+                onChange={v => set('model_id')(v)}
+                placeholder="Default model"
+              />
+              <p className="text-[10px] text-jarvis-muted mt-1.5">
+                Override the default model for this routine. Local runs privately; Gemini supports complex coding tasks.
+              </p>
+            </div>
+            <Toggle
+              checked={form.active}
+              onChange={set('active')}
+              label="Routine is active"
+            />
+          </div>
         )}
       </div>
 

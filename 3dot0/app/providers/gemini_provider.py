@@ -58,7 +58,23 @@ class GeminiProvider(BaseLLM):
                                 args = json.loads(args)
                             except json.JSONDecodeError:
                                 args = {}
-                        parts.append(types.Part.from_function_call(name=name, args=args))
+
+                        thought_sig = tc.get("thought_signature")
+                        fc_part = types.Part.from_function_call(name=name, args=args)
+
+                        if thought_sig:
+                            # Reconstruct the Part with the thought_signature so the
+                            # model can recover its internal reasoning context.
+                            # NOTE: Do NOT merge signature Parts — one Part per call.
+                            try:
+                                fc_part = types.Part(
+                                    function_call=fc_part.function_call,
+                                    thought_signature=thought_sig,
+                                )
+                            except Exception:
+                                pass  # SDK version may not support this construction
+
+                        parts.append(fc_part)
                 contents.append(types.Content(role="model", parts=parts))
 
             elif role in ("tool", "function"):
@@ -98,11 +114,18 @@ class GeminiProvider(BaseLLM):
                     fc = part.function_call
                     # Extract arguments safely as a dictionary
                     args = fc.args if isinstance(fc.args, dict) else dict(fc.args) if fc.args else {}
-                    
+
+                    # Capture ID and thought_signature for thinking models.
+                    # These must be echoed back verbatim in subsequent turns.
+                    fc_id = getattr(fc, "id", None)
+                    thought_sig = getattr(part, "thought_signature", None)
+
                     tool_calls.append(
                         ToolCall(
                             name=fc.name,
-                            arguments=args
+                            arguments=args,
+                            id=fc_id,
+                            thought_signature=thought_sig,
                         )
                     )
 

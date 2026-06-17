@@ -242,7 +242,12 @@ class AgentLoop:
 
             self.on_event("tool_result", {"name": tc.name, "result": result[:300]})
 
-            results.append({"role": "tool", "content": result, "name": tc.name})
+            results.append({
+                "role": "tool",
+                "content": result,
+                "name": tc.name,
+                **({"tool_call_id": tc.id} if tc.id else {}),
+            })
 
         return results
 
@@ -270,7 +275,11 @@ def _build_assistant_tool_msg(
         "role": "assistant",
         "content": content,
         "tool_calls": [
-            {"function": {"name": tc.name, "arguments": tc.arguments}}
+            {
+                "function": {"name": tc.name, "arguments": tc.arguments},
+                "id": tc.id,
+                "thought_signature": tc.thought_signature,
+            }
             for tc in tool_calls
         ],
     }

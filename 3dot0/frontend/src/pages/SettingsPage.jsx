@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Settings, Save, ExternalLink, Shield, Cpu, Wifi, User, Lock, LogOut, Users } from 'lucide-react'
 import { GlassPanel, Button, Toggle, SectionHeader, Spinner } from '../components/ui'
+import ModelPicker from '../components/ModelPicker'
 import useStore from '../store'
 import { API_BASE, WS_URL } from '../config'
 import * as API from '../api'
@@ -27,6 +28,10 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState(() => {
     try { return JSON.parse(currentUser?.preferences || '{}').timezone ?? 'America/New_York' }
     catch { return 'America/New_York' }
+  })
+  const [defaultModelId, setDefaultModelId] = useState(() => {
+    try { return JSON.parse(currentUser?.preferences || '{}').default_model_id ?? null }
+    catch { return null }
   })
   const [savingPrefs, setSavingPrefs] = useState(false)
 
@@ -62,7 +67,7 @@ export default function SettingsPage() {
     try {
       let existingPrefs = {}
       try { existingPrefs = JSON.parse(currentUser?.preferences || '{}') } catch {}
-      const newPrefs = { ...existingPrefs, timezone }
+      const newPrefs = { ...existingPrefs, timezone, default_model_id: defaultModelId }
       const payload = { preferences: JSON.stringify(newPrefs) }
       const updated = authToken
         ? await API.updateAuthMe(authToken, payload)
@@ -172,6 +177,18 @@ export default function SettingsPage() {
               className="glass w-full rounded-lg px-3 py-2 text-sm text-jarvis-text font-mono outline-none focus:border-jarvis-cyan/50"
             />
             <p className="text-[10px] text-jarvis-muted mt-1">Used for scheduling reminders and time-aware tasks.</p>
+          </div>
+          <div>
+            <label className="text-xs text-jarvis-muted block mb-1">Default Model</label>
+            <ModelPicker
+              value={defaultModelId}
+              onChange={setDefaultModelId}
+              placeholder="Config default (from server)"
+              className="w-full"
+            />
+            <p className="text-[10px] text-jarvis-muted mt-1">
+              Used when no model is selected for a chat or routine. Local runs privately on your machine; Gemini requires an API key.
+            </p>
           </div>
         </div>
         <div className="flex justify-end mt-4">

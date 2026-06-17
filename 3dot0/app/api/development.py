@@ -416,6 +416,7 @@ def create_dev_task(payload: dict, session: Session = Depends(get_session)):
 
     _repo_path(project_name)  # validate project exists
     user = _get_default_user(session)
+    model_id = payload.get("model_id") or None
 
     task = Task(
         user_id=user.id,
@@ -426,6 +427,7 @@ def create_dev_task(payload: dict, session: Session = Depends(get_session)):
         ),
         system_prompt_override=_DEV_SYSTEM_PROMPT,
         allowed_skill_names_override=json.dumps(_DEV_SKILL_NAMES),
+        model_id=model_id,
         status=TaskStatus.queued,
     )
     session.add(task)

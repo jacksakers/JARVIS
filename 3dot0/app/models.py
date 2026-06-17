@@ -129,7 +129,8 @@ class Routine(SQLModel, table=True):
     # Empty list = all skills. This prevents context bloat and security issues.
     # e.g. '["get_system_time", "calculate"]'
     allowed_skill_names: str = Field(default="[]")
-
+    # LLM model ID to use for this routine (None = config default)
+    model_id: Optional[str] = Field(default=None)
     active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -171,6 +172,8 @@ class Task(SQLModel, table=True):
     conversation_id: Optional[int] = Field(default=None, foreign_key="conversations.id")
     # JSON array of skill names to allow for this specific task (overrides defaults)
     allowed_skill_names_override: Optional[str] = Field(default=None)
+    # LLM model ID to use (None = use routine's model, or config default)
+    model_id: Optional[str] = Field(default=None)
     # JSON-serialised routine generation config (if this is a routine generation task)
     # Format: {"description": "user description"}
     routine_generation_config: Optional[str] = Field(default=None)
@@ -227,6 +230,8 @@ class Conversation(SQLModel, table=True):
     title: str = Field(default="New Conversation")
     # Persona/system prompt override for this conversation
     system_prompt_override: Optional[str] = Field(default=None)
+    # LLM model ID to use for this conversation (None = user default or config default)
+    model_id: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -362,6 +367,7 @@ class RoutineCreate(SQLModel):
     trigger_value: str = ""
     system_prompt: str = "You are JARVIS, a helpful AI assistant."
     allowed_skill_names: str = "[]"
+    model_id: Optional[str] = None
     active: bool = True
 
 
@@ -372,6 +378,7 @@ class RoutineUpdate(SQLModel):
     trigger_value: Optional[str] = None
     system_prompt: Optional[str] = None
     allowed_skill_names: Optional[str] = None
+    model_id: Optional[str] = None
     active: Optional[bool] = None
 
 
@@ -384,6 +391,7 @@ class RoutineRead(SQLModel):
     trigger_value: str
     system_prompt: str
     allowed_skill_names: str
+    model_id: Optional[str]
     active: bool
     created_at: datetime
     updated_at: datetime
@@ -393,6 +401,8 @@ class TaskCreate(SQLModel):
     prompt: str
     routine_id: Optional[int] = None
     system_prompt_override: Optional[str] = None
+    conversation_id: Optional[int] = None
+    model_id: Optional[str] = None
 
 
 class TaskRead(SQLModel):
@@ -404,6 +414,7 @@ class TaskRead(SQLModel):
     status: TaskStatus
     error_message: Optional[str]
     question_feed_item_id: Optional[int]
+    model_id: Optional[str]
     created_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
@@ -498,11 +509,13 @@ class SkillRead(SQLModel):
 class ConversationCreate(SQLModel):
     title: str = "New Conversation"
     system_prompt_override: Optional[str] = None
+    model_id: Optional[str] = None
 
 
 class ConversationUpdate(SQLModel):
     title: Optional[str] = None
     system_prompt_override: Optional[str] = None
+    model_id: Optional[str] = None
 
 
 class ConversationMessageRead(SQLModel):
@@ -521,16 +534,10 @@ class ConversationRead(SQLModel):
     user_id: int
     title: str
     system_prompt_override: Optional[str]
+    model_id: Optional[str]
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
-
-
-class TaskCreate(SQLModel):
-    prompt: str
-    routine_id: Optional[int] = None
-    system_prompt_override: Optional[str] = None
-    conversation_id: Optional[int] = None
 
 
 # ── Auth schemas ──────────────────────────────────────────────────────────────

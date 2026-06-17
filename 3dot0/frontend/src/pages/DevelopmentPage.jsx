@@ -9,6 +9,7 @@ import clsx from 'clsx'
 import * as API from '../api'
 import useStore from '../store'
 import { Spinner, EmptyState } from '../components/ui'
+import ModelPicker from '../components/ModelPicker'
 
 // ── Diff viewer ───────────────────────────────────────────────────────────
 
@@ -211,6 +212,7 @@ export default function DevelopmentPage() {
   const [projectTree, setProjectTree] = useState(null)
   const [treeLoading, setTreeLoading] = useState(false)
   const [treeOpen, setTreeOpen] = useState(false)
+  const [selectedModelId, setSelectedModelId] = useState(null)
 
   const eventsEndRef  = useRef(null)
   const activeTaskRef = useRef(null)
@@ -370,7 +372,7 @@ export default function DevelopmentPage() {
     setTaskEvents([])
     setTaskStatus('queued')
     try {
-      const res = await API.createDevTask(selectedProject.name, description.trim(), mockMode)
+      const res = await API.createDevTask(selectedProject.name, description.trim(), mockMode, selectedModelId)
       setActiveTaskId(res.task_id)
       setDevTaskState({ taskId: res.task_id, projectName: selectedProject.name, taskStatus: 'queued', prId: null })
       setTaskEvents([{ type: 'status', message: `Task #${res.task_id} queued…` }])
@@ -616,8 +618,15 @@ export default function DevelopmentPage() {
                     rows={4}
                     className="w-full bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-jarvis-muted/50 outline-none focus:border-jarvis-cyan/50 resize-y"
                   />
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="text-xs text-jarvis-muted">Ctrl+Enter to submit</span>
+                  <div className="flex items-center justify-between mt-3 gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-jarvis-muted">Ctrl+Enter to submit</span>
+                      <ModelPicker
+                        value={selectedModelId}
+                        onChange={setSelectedModelId}
+                        placeholder="Default model"
+                      />
+                    </div>
                     <button
                       onClick={submitTask}
                       disabled={!description.trim() || submitting}

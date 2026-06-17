@@ -28,13 +28,13 @@ from app.config import load_config
 from app.core.agent_loop import AgentLoop, UserInputRequired
 from app.core.markdown_utils import extract_title, render_markdown
 from app.core.memory_manager import IntelligentMemoryManager
+from app.core.model_registry import create_llm, is_gemini_model
 from app.core.tool_registry import ToolRegistry
 from app.database import session_scope
 from app.models import Conversation, ConversationMessage, FeedItem, FeedItemType, Routine, Task, TaskStatus
 from app.providers.ollama_provider import OllamaProvider
 from app.worker.connection_manager import manager
-from app.providers.gemini_provider import GeminiProvider 
-from app.worker.connection_manager import manager
+from app.providers.gemini_provider import GeminiProvider
 
 logger = logging.getLogger(__name__)
 
@@ -50,33 +50,28 @@ _DEFAULT_SYSTEM_PROMPT = (
 class BackgroundWorker:
     """
     Continuously polls the tasks table and processes jobs using the AgentLoop.
+
+    Each instance is scoped to a provider family ("local" or "gemini") so that
+    two workers can run in parallel — one for on-device Ollama models and one
+    for cloud Gemini models — without competing for the same tasks.
     """
 
-    def __init__(self, cfg: Optional[dict] = None) -> None:
+    def __init__(self, cfg: Optional[dict] = None, provider_filter: str = "all") -> None:
         self._cfg = cfg or load_config()
+        self._provider_filter = provider_filter  # "local", "gemini", or "all"
         self._stop_event = threading.Event()
-        self._thread = threading.Thread(target=self._poll_loop, daemon=True, name="jarvis-worker")
+        thread_name = f"jarvis-worker-{provider_filter}"
+        self._thread = threading.Thread(target=self._poll_loop, daemon=True, name=thread_name)
         self._registry = ToolRegistry()
         self._registry.discover_skills()
 
+        # Cache of model_id -> BaseLLM instances (avoid re-creating per task)
+        self._llm_cache: dict = {}
+
+        # Pre-warm the default LLM so the first task starts immediately
         llm_cfg = self._cfg.get("llm", {})
-
-        # 2. Determine which provider to use from your config dictionary
-        provider_type = llm_cfg.get("provider", "ollama").lower()
-
-        if provider_type == "gemini":
-            self._llm = GeminiProvider(
-                model=llm_cfg.get("model", "gemini-2.5-flash"),
-                # api_key=llm_cfg.get("api_key"),  # Optional: can also rely on GEMINI_API_KEY env var
-                options=llm_cfg.get("options", {}),
-            )
-        else:
-            # Fall back to default Ollama setup
-            self._llm = OllamaProvider(
-                model=llm_cfg.get("model", "gemma4:e4b"),
-                base_url=llm_cfg.get("ollama_url", "http://localhost:11434"),
-                options=llm_cfg.get("options", {}),
-            )
+        default_model = llm_cfg.get("model", "gemma4:e4b")
+        self._llm_cache[default_model] = create_llm(default_model, self._cfg)
 
         worker_cfg = self._cfg.get("worker", {})
         self._poll_interval = worker_cfg.get("poll_interval_seconds", 2)
@@ -85,6 +80,15 @@ class BackgroundWorker:
         mem_cfg = self._cfg.get("memory", {})
         self._max_recent_turns = mem_cfg.get("max_recent_turns", 8)
         self._max_tokens = mem_cfg.get("max_tokens", 8000)
+
+    def _get_llm(self, model_id: Optional[str]):
+        """Return a cached LLM for the given model_id, creating one if needed."""
+        if not model_id:
+            llm_cfg = self._cfg.get("llm", {})
+            model_id = llm_cfg.get("model", "gemma4:e4b")
+        if model_id not in self._llm_cache:
+            self._llm_cache[model_id] = create_llm(model_id, self._cfg)
+        return self._llm_cache[model_id]
 
     def start(self) -> None:
         self._thread.start()
@@ -108,6 +112,7 @@ class BackgroundWorker:
                 user_id=routine.user_id,
                 routine_id=routine_id,
                 prompt=prompt,
+                model_id=routine.model_id,  # propagate routine's model preference
                 status=TaskStatus.queued,
             )
             session.add(task)
@@ -135,12 +140,23 @@ class BackgroundWorker:
         """Pick up and process the oldest queued task, if any."""
         with session_scope() as session:
             from sqlmodel import select
-            task = session.exec(
+            query = (
                 select(Task)
                 .where(Task.status == TaskStatus.queued)
                 .order_by(Task.created_at.asc())
                 .limit(1)
-            ).first()
+            )
+            # Filter by provider so the local and Gemini workers don't compete
+            if self._provider_filter == "gemini":
+                query = query.where(Task.model_id.like("gemini-%"))
+            elif self._provider_filter == "local":
+                from sqlmodel import or_, col
+                query = query.where(
+                    or_(Task.model_id == None, ~col(Task.model_id).like("gemini-%"))  # noqa: E711
+                )
+            # "all" — no filter (backward-compatible single-worker mode)
+
+            task = session.exec(query).first()
 
             if not task:
                 return
@@ -158,6 +174,7 @@ class BackgroundWorker:
             task_conv_state = task.conversation_state
             task_gen_config = task.routine_generation_config
             task_allowed_skills_override = task.allowed_skill_names_override
+            task_model_id = task.model_id
 
         manager.broadcast_from_thread(
             "task_started",
@@ -168,7 +185,7 @@ class BackgroundWorker:
         try:
             # Check if this is a routine generation task
             if task_gen_config:
-                self._process_routine_generation(task_id, task_user_id, task_gen_config)
+                self._process_routine_generation(task_id, task_user_id, task_gen_config, task_model_id)
             else:
                 result_md, memory = self._run_agent(
                     task_id=task_id,
@@ -178,6 +195,7 @@ class BackgroundWorker:
                     saved_state=task_conv_state,
                     conversation_id=task_conversation_id,
                     allowed_skill_names_override=task_allowed_skills_override,
+                    model_id=task_model_id,
                 )
                 self._save_result(
                     task_id=task_id,
@@ -201,27 +219,39 @@ class BackgroundWorker:
         saved_state: Optional[str] = None,
         conversation_id: Optional[int] = None,
         allowed_skill_names_override: Optional[str] = None,
+        model_id: Optional[str] = None,
     ):
         """Set up and run the AgentLoop for this task. Returns (result_md, memory)."""
         system_prompt = system_prompt_override or _DEFAULT_SYSTEM_PROMPT
         allowed_skills: Optional[List[str]] = None  # None = all skills
 
+        # Resolve model_id: task → routine → config default
+        resolved_model_id = model_id
         if routine_id:
             with session_scope() as session:
                 routine = session.get(Routine, routine_id)
                 if routine:
                     if routine.system_prompt:
                         system_prompt = routine.system_prompt
-                    # Use the routine's explicit skill list (may be empty = no skills)
                     allowed_skills = routine.get_allowed_skills()
+                    if not resolved_model_id:
+                        resolved_model_id = routine.model_id
         elif allowed_skill_names_override is not None:
-            # Per-task skill override (e.g. from chat tool selector or dev tasks)
             try:
                 parsed = json.loads(allowed_skill_names_override)
                 if isinstance(parsed, list):
                     allowed_skills = parsed
             except Exception:
                 pass
+
+        # Resolve model from conversation if still None
+        if not resolved_model_id and conversation_id:
+            with session_scope() as session:
+                conv = session.get(Conversation, conversation_id)
+                if conv:
+                    resolved_model_id = conv.model_id
+
+        llm = self._get_llm(resolved_model_id)
 
         # Restore conversation state if this task was paused (ask_user resume)
         if saved_state:
@@ -284,7 +314,7 @@ class BackgroundWorker:
         _ask_mod._current_task.memory = memory
 
         agent = AgentLoop(
-            llm=self._llm,
+            llm=llm,
             registry=self._registry,
             memory=memory,
             on_event=on_event,
@@ -305,6 +335,7 @@ class BackgroundWorker:
         task_id: int,
         user_id: int,
         generation_config: str,
+        model_id: Optional[str] = None,
     ) -> None:
         """Generate a routine via LLM and save it to the database."""
         try:
@@ -353,7 +384,8 @@ class BackgroundWorker:
 
         content = ""
         try:
-            for chunk in self._llm.stream(messages, tools=None):
+            llm = self._get_llm(model_id)
+            for chunk in llm.stream(messages, tools=None):
                 if chunk.content:
                     content += chunk.content
         except Exception as exc:

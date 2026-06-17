@@ -16,6 +16,7 @@ from app.api import feed, journal, routines, skills, tasks, users, ws
 from app.api import auth as auth_router
 from app.api import conversations as convs_router
 from app.api import development as dev_router
+from app.api import models as models_router
 from app.config import load_config
 from app.database import init_db, session_scope
 from app.models import Skill, User
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 # Shared worker / scheduler instances (created in lifespan)
 # ─────────────────────────────────────────────────────────────────────────────
 _worker: BackgroundWorker = None
+_gemini_worker: BackgroundWorker = None
 _scheduler: RoutineScheduler = None
 
 
@@ -84,7 +86,7 @@ def _bootstrap_db(cfg: dict) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan: run setup on startup, teardown on shutdown."""
-    global _worker, _scheduler
+    global _worker, _gemini_worker, _scheduler
 
     cfg = load_config()
 
@@ -94,10 +96,14 @@ async def lifespan(app: FastAPI):
     # ── WebSocket event loop ──────────────────────────────────────────────────
     manager.set_event_loop(asyncio.get_event_loop())
 
-    # ── Background worker ─────────────────────────────────────────────────────
-    _worker = BackgroundWorker(cfg)
+    # ── Background workers ────────────────────────────────────────────────────
+    # Two workers run in parallel: one for local (Ollama) tasks, one for Gemini.
+    # This allows a Gemini task and a local task to process simultaneously.
+    _worker = BackgroundWorker(cfg, provider_filter="local")
     _worker.start()
-    logger.info("Background worker started.")
+    _gemini_worker = BackgroundWorker(cfg, provider_filter="gemini")
+    _gemini_worker.start()
+    logger.info("Background workers started (local + gemini).")
 
     # ── Routine scheduler ─────────────────────────────────────────────────────
     _scheduler = RoutineScheduler(_worker)
@@ -109,6 +115,7 @@ async def lifespan(app: FastAPI):
     # ── Shutdown ──────────────────────────────────────────────────────────────
     _scheduler.stop()
     _worker.stop()
+    _gemini_worker.stop()
     logger.info("JARVIS v3.0 shut down cleanly.")
 
 
@@ -148,6 +155,7 @@ app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(auth_router.router, prefix=API_PREFIX)
 app.include_router(convs_router.router, prefix=API_PREFIX)
 app.include_router(dev_router.router, prefix=API_PREFIX)
+app.include_router(models_router.router, prefix=API_PREFIX)
 app.include_router(ws.router)  # WebSocket at /ws (no version prefix)
 
 

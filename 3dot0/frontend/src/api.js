@@ -110,11 +110,16 @@ export const createConversation = (payload, mock)  => post('/api/v1/conversation
 export const updateConversation = (id, data, mock) => patch(`/api/v1/conversations/${id}`, data, mock, () => null)
 export const deleteConversation = (id, mock)       => del(`/api/v1/conversations/${id}`, mock, () => null)
 export const getConversationMessages = (id, mock)  => get(`/api/v1/conversations/${id}/messages`, mock, () => [])
-export const sendConversationMessage = (id, content, allowedSkills, mock) =>
+export const sendConversationMessage = (id, content, allowedSkills, mock, modelId) =>
   post(`/api/v1/conversations/${id}/messages`, {
     content,
     ...(allowedSkills !== undefined ? { allowed_skill_names: allowedSkills } : {}),
+    ...(modelId ? { model_id: modelId } : {}),
   }, mock, () => null)
+
+// ── Models ────────────────────────────────────────────────────────────────
+
+export const getModels = () => get('/api/v1/models/', false, () => [])
 
 // ── Routines generate ─────────────────────────────────────────────────────
 
@@ -136,4 +141,4 @@ export const mergeDevPR         = (id, mock)       => post(`/api/v1/dev/prs/${id
 export const discardDevPR       = (id, mock)       => post(`/api/v1/dev/prs/${id}/discard`, null, mock, () => null)
 export const cancelDevPR        = (id, mock)       => post(`/api/v1/dev/prs/${id}/cancel`, null, mock, () => null)
 export const requestDevChanges  = (id, feedback, mock) => post(`/api/v1/dev/prs/${id}/request-changes`, { feedback }, mock, () => null)
-export const createDevTask      = (project_name, description, mock) => post('/api/v1/dev/task', { project_name, description }, mock, () => null)
+export const createDevTask      = (project_name, description, mock, modelId) => post('/api/v1/dev/task', { project_name, description, ...(modelId ? { model_id: modelId } : {}) }, mock, () => null)

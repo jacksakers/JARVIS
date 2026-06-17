@@ -71,6 +71,10 @@ def _run_migrations() -> None:
             ("users",           "bio",           "ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''"),
             # Task: per-task tool allowlist (for chat tool-selection feature)
             ("tasks", "allowed_skill_names_override", "ALTER TABLE tasks ADD COLUMN allowed_skill_names_override TEXT DEFAULT NULL"),
+            # Model selection
+            ("tasks",          "model_id", "ALTER TABLE tasks ADD COLUMN model_id TEXT DEFAULT NULL"),
+            ("conversations",  "model_id", "ALTER TABLE conversations ADD COLUMN model_id TEXT DEFAULT NULL"),
+            ("routines",       "model_id", "ALTER TABLE routines ADD COLUMN model_id TEXT DEFAULT NULL"),
         ]
 
         for table, column, sql in migrations:

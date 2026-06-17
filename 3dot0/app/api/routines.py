@@ -104,6 +104,7 @@ def run_routine_now(routine_id: int, session: Session = Depends(get_session)):
             f"[Manual run: {routine.name}] "
             "Please execute this routine now and produce a complete report."
         ),
+        model_id=routine.model_id,
         status=TaskStatus.queued,
     )
     session.add(task)

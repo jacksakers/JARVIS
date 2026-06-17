@@ -42,6 +42,7 @@ def _conv_read(conv: Conversation, session: Session) -> ConversationRead:
         user_id=conv.user_id,
         title=conv.title,
         system_prompt_override=conv.system_prompt_override,
+        model_id=conv.model_id,
         created_at=conv.created_at,
         updated_at=conv.updated_at,
         message_count=count or 0,
@@ -74,6 +75,7 @@ def create_conversation(
         user_id=user.id,
         title=payload.title,
         system_prompt_override=payload.system_prompt_override,
+        model_id=payload.model_id,
         created_at=now,
         updated_at=now,
     )
@@ -96,6 +98,8 @@ def update_conversation(
         conv.title = payload.title
     if payload.system_prompt_override is not None:
         conv.system_prompt_override = payload.system_prompt_override
+    if payload.model_id is not None:
+        conv.model_id = payload.model_id
     conv.updated_at = datetime.now(timezone.utc)
     session.add(conv)
     session.commit()
@@ -159,6 +163,9 @@ def send_message(
     if isinstance(allowed_skill_names, list):
         allowed_skill_names_json = json.dumps(allowed_skill_names)
 
+    # Model selection: per-message override → conversation default
+    model_id: Optional[str] = payload.get("model_id") or conv.model_id
+
     now = datetime.now(timezone.utc)
 
     # Save the user message
@@ -177,6 +184,7 @@ def send_message(
         conversation_id=conv_id,
         system_prompt_override=conv.system_prompt_override,
         allowed_skill_names_override=allowed_skill_names_json,
+        model_id=model_id,
         status=TaskStatus.queued,
     )
     session.add(task)
