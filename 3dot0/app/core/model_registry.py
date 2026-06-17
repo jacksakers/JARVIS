@@ -68,7 +68,7 @@ AVAILABLE_MODELS: List[Dict[str, Any]] = [
         "thinking": True,
         "badge": "Paid",
         "pricing": _PRICING["gemini-3.1-flash-lite"],
-    }
+    },
     {
         "id": "gemini-3.5-flash",
         "name": "Gemini 3.5 Flash",
