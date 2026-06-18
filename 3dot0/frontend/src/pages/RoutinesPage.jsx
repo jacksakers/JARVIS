@@ -573,7 +573,7 @@ export default function RoutinesPage() {
         title="Automations"
         subtitle="Scheduled routines and on-demand tasks. Zero Python required."
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="ghost" size="sm" onClick={() => setShowGenerate(true)}>
               <Cpu size={14} /> Generate with AI
             </Button>

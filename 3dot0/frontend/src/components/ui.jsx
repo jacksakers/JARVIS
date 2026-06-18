@@ -191,16 +191,27 @@ export function Spinner({ size = 16 }) {
 
 // ── SectionHeader ─────────────────────────────────────────────────────────
 
+
 export function SectionHeader({ title, subtitle, actions }) {
+
   return (
-    <div className="flex items-start justify-between gap-4 mb-4">
+
+    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
+
       <div>
+
         <h2 className="text-base font-semibold text-jarvis-text">{title}</h2>
+
         {subtitle && <p className="text-xs text-jarvis-muted mt-0.5">{subtitle}</p>}
+
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+
+      {actions && <div className="flex items-center gap-2 flex-wrap sm:justify-end">{actions}</div>}
+
     </div>
+
   )
+
 }
 
 // ── Textarea ──────────────────────────────────────────────────────────────
