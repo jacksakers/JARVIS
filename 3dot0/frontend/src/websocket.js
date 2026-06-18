@@ -9,6 +9,7 @@ import { startAmbientEvents } from './mock'
 
 let _ws = null
 let _ambientTimer = null
+let _intentionalClose = false
 
 export function connectWS() {
   const store = useStore.getState()
@@ -35,10 +36,13 @@ export function connectWS() {
       useStore.getState().setWsStatus('disconnected')
       useStore.getState().addWsEvent({ event: 'ws_disconnected', data: {}, ts: new Date().toISOString() })
       _ws = null
-      // Auto-reconnect after 5s
-      setTimeout(() => {
-        if (!useStore.getState().mockMode) connectWS()
-      }, 5000)
+      // Auto-reconnect only if the close was not intentional (e.g. network drop)
+      if (!_intentionalClose) {
+        setTimeout(() => {
+          if (!useStore.getState().mockMode) connectWS()
+        }, 5000)
+      }
+      _intentionalClose = false
     }
   } catch (err) {
     useStore.getState().setWsStatus('error')
@@ -53,6 +57,7 @@ export function connectMockWS() {
 }
 
 export function disconnectWS() {
+  _intentionalClose = true
   if (_ws) { _ws.close(); _ws = null }
   if (_ambientTimer) { clearInterval(_ambientTimer); _ambientTimer = null }
 }
