@@ -79,6 +79,8 @@ def _run_migrations() -> None:
             ("tasks", "tokens_prompt",     "ALTER TABLE tasks ADD COLUMN tokens_prompt INTEGER NOT NULL DEFAULT 0"),
             ("tasks", "tokens_completion", "ALTER TABLE tasks ADD COLUMN tokens_completion INTEGER NOT NULL DEFAULT 0"),
             ("tasks", "tokens_thinking",   "ALTER TABLE tasks ADD COLUMN tokens_thinking INTEGER NOT NULL DEFAULT 0"),
+            # Per-task max tool iterations override
+            ("tasks", "max_tool_iterations", "ALTER TABLE tasks ADD COLUMN max_tool_iterations INTEGER DEFAULT NULL"),
         ]
 
         for table, column, sql in migrations:

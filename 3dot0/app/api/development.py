@@ -418,6 +418,13 @@ def create_dev_task(payload: dict, session: Session = Depends(get_session)):
     user = _get_default_user(session)
     model_id = payload.get("model_id") or None
 
+    max_tool_iterations = payload.get("max_tool_iterations")
+    if max_tool_iterations is not None:
+        try:
+            max_tool_iterations = max(1, min(200, int(max_tool_iterations)))
+        except (TypeError, ValueError):
+            max_tool_iterations = None
+
     task = Task(
         user_id=user.id,
         prompt=(
@@ -428,6 +435,7 @@ def create_dev_task(payload: dict, session: Session = Depends(get_session)):
         system_prompt_override=_DEV_SYSTEM_PROMPT,
         allowed_skill_names_override=json.dumps(_DEV_SKILL_NAMES),
         model_id=model_id,
+        max_tool_iterations=max_tool_iterations,
         status=TaskStatus.queued,
     )
     session.add(task)

@@ -141,4 +141,4 @@ export const mergeDevPR         = (id, mock)       => post(`/api/v1/dev/prs/${id
 export const discardDevPR       = (id, mock)       => post(`/api/v1/dev/prs/${id}/discard`, null, mock, () => null)
 export const cancelDevPR        = (id, mock)       => post(`/api/v1/dev/prs/${id}/cancel`, null, mock, () => null)
 export const requestDevChanges  = (id, feedback, mock) => post(`/api/v1/dev/prs/${id}/request-changes`, { feedback }, mock, () => null)
-export const createDevTask      = (project_name, description, mock, modelId) => post('/api/v1/dev/task', { project_name, description, ...(modelId ? { model_id: modelId } : {}) }, mock, () => null)
+export const createDevTask      = (project_name, description, mock, modelId, maxToolIterations) => post('/api/v1/dev/task', { project_name, description, ...(modelId ? { model_id: modelId } : {}), ...(maxToolIterations ? { max_tool_iterations: maxToolIterations } : {}) }, mock, () => null)

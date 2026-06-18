@@ -195,6 +195,7 @@ class BackgroundWorker:
             task_gen_config = task.routine_generation_config
             task_allowed_skills_override = task.allowed_skill_names_override
             task_model_id = task.model_id
+            task_max_tool_iterations = task.max_tool_iterations
 
         manager.broadcast_from_thread(
             "task_started",
@@ -216,6 +217,7 @@ class BackgroundWorker:
                     conversation_id=task_conversation_id,
                     allowed_skill_names_override=task_allowed_skills_override,
                     model_id=task_model_id,
+                    max_tool_iterations_override=task_max_tool_iterations,
                 )
                 self._save_result(
                     task_id=task_id,
@@ -241,6 +243,7 @@ class BackgroundWorker:
         conversation_id: Optional[int] = None,
         allowed_skill_names_override: Optional[str] = None,
         model_id: Optional[str] = None,
+        max_tool_iterations_override: Optional[int] = None,
     ):
         """Set up and run the AgentLoop for this task. Returns (result_md, memory)."""
         system_prompt = system_prompt_override or _DEFAULT_SYSTEM_PROMPT
@@ -361,7 +364,12 @@ class BackgroundWorker:
             allowed_skill_names_override is not None
             and "dev_list_repos" in (allowed_skill_names_override or "")
         )
-        max_iters = 20 if is_dev_task else self._max_tool_iterations
+        if max_tool_iterations_override is not None:
+            max_iters = max_tool_iterations_override
+        elif is_dev_task:
+            max_iters = 20
+        else:
+            max_iters = self._max_tool_iterations
 
         result = agent.run_turn(prompt, allowed_skill_names=allowed_skills, max_iterations=max_iters)
         return result, memory, _token_usage

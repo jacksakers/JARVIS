@@ -181,6 +181,8 @@ class Task(SQLModel, table=True):
     # JSON-serialised routine generation config (if this is a routine generation task)
     # Format: {"description": "user description"}
     routine_generation_config: Optional[str] = Field(default=None)
+    # Per-task override for the maximum number of tool call iterations (None = use config default)
+    max_tool_iterations: Optional[int] = Field(default=None)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Field(default=None)

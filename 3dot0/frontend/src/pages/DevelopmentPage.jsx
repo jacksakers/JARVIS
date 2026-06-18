@@ -108,9 +108,30 @@ function TreeViewer({ tree }) {
   }, [tree])
 
   const handleCopy = (path) => {
-    navigator.clipboard.writeText(path).catch(() => {})
-    setCopiedPath(path)
-    setTimeout(() => setCopiedPath(null), 1500)
+    const doSet = () => {
+      setCopiedPath(path)
+      setTimeout(() => setCopiedPath(null), 1500)
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(path).then(doSet).catch(() => {
+        fallbackCopy(path)
+        doSet()
+      })
+    } else {
+      fallbackCopy(path)
+      doSet()
+    }
+  }
+
+  const fallbackCopy = (text) => {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.cssText = 'position:fixed;opacity:0;pointer-events:none'
+    document.body.appendChild(el)
+    el.focus()
+    el.select()
+    try { document.execCommand('copy') } catch {}
+    document.body.removeChild(el)
   }
 
   if (!items.length) return <p className="text-jarvis-muted text-xs">Tree unavailable.</p>
@@ -141,9 +162,9 @@ function TreeViewer({ tree }) {
               'ml-auto pr-2 transition-opacity text-[10px]',
               copiedPath === item.fullPath
                 ? 'text-green-400 opacity-100'
-                : 'text-jarvis-muted/40 opacity-0 group-hover:opacity-100',
+                : 'text-jarvis-muted/40 opacity-100 sm:opacity-0 sm:group-hover:opacity-100',
             )}>
-              {copiedPath === item.fullPath ? 'copied!' : 'copy path'}
+              {copiedPath === item.fullPath ? 'copied!' : 'copy'}
             </span>
           )}
         </div>
@@ -213,6 +234,7 @@ export default function DevelopmentPage() {
   const [treeLoading, setTreeLoading] = useState(false)
   const [treeOpen, setTreeOpen] = useState(false)
   const [selectedModelId, setSelectedModelId] = useState(null)
+  const [maxIterations, setMaxIterations] = useState(20)
 
   const eventsEndRef  = useRef(null)
   const activeTaskRef = useRef(null)
@@ -372,7 +394,7 @@ export default function DevelopmentPage() {
     setTaskEvents([])
     setTaskStatus('queued')
     try {
-      const res = await API.createDevTask(selectedProject.name, description.trim(), mockMode, selectedModelId)
+      const res = await API.createDevTask(selectedProject.name, description.trim(), mockMode, selectedModelId, maxIterations)
       setActiveTaskId(res.task_id)
       setDevTaskState({ taskId: res.task_id, projectName: selectedProject.name, taskStatus: 'queued', prId: null })
       setTaskEvents([{ type: 'status', message: `Task #${res.task_id} queued…` }])
@@ -619,13 +641,24 @@ export default function DevelopmentPage() {
                     className="w-full bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-jarvis-muted/50 outline-none focus:border-jarvis-cyan/50 resize-y"
                   />
                   <div className="flex items-center justify-between mt-3 gap-2 flex-wrap">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-jarvis-muted">Ctrl+Enter to submit</span>
                       <ModelPicker
                         value={selectedModelId}
                         onChange={setSelectedModelId}
                         placeholder="Default model"
                       />
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-jarvis-muted">Max iterations</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={200}
+                          value={maxIterations}
+                          onChange={e => setMaxIterations(Math.max(1, Math.min(200, parseInt(e.target.value) || 1)))}
+                          className="w-16 bg-jarvis-bg border border-jarvis-border rounded px-2 py-1 text-xs text-white text-center outline-none focus:border-jarvis-cyan/50"
+                        />
+                      </div>
                     </div>
                     <button
                       onClick={submitTask}
