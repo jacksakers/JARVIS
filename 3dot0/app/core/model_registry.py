@@ -15,7 +15,7 @@ _PRICING: Dict[str, Dict[str, float]] = {
     # Gemini 3 series (preview pricing — subject to change)
     "gemini-3-flash-preview": {"input": 0.50, "output": 3.00},
     "gemini-3.1-flash-lite": {"input": 0.25, "output": 1.50},
-    "gemini-3.5-flash":       {"input": 1.50, "output": 9.00},
+    "gemini-3.5-flash":      {"input": 1.50, "output": 9.00},
 }
 
 AVAILABLE_MODELS: List[Dict[str, Any]] = [
