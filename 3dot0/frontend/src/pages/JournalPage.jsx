@@ -659,7 +659,7 @@ export default function JournalPage() {
 
           {/* Quick capture */}
           <GlassPanel className="p-4 glow-border">
-            <div className="flex gap-2 mb-2">
+            <div className="flex flex-col sm:flex-row gap-2 mb-2">
               <input
                 value={title}
                 onChange={e => setTitle(e.target.value)}
@@ -669,7 +669,7 @@ export default function JournalPage() {
               <select
                 value={selCategory}
                 onChange={e => setSelCategory(e.target.value)}
-                className="glass rounded-lg px-2 py-1.5 text-sm text-jarvis-text bg-jarvis-surface outline-none max-w-[140px]"
+                className="glass rounded-lg px-2 py-1.5 text-sm text-jarvis-text bg-jarvis-surface outline-none w-full sm:max-w-[140px]"
               >
                 <option value="">No category</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
