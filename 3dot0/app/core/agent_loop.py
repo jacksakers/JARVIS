@@ -209,9 +209,6 @@ class AgentLoop:
                 chunk = self.llm.chat(messages, tools=tools)
                 if chunk.usage:
                     self._accumulated_usage = self._accumulated_usage + chunk.usage
-                if chunk.tool_calls:
-                    for tc in chunk.tool_calls:
-                        self.on_event("tool_call", {"name": tc.name, "arguments": tc.arguments})
                 return chunk.content, chunk.tool_calls or None
             except Exception as exc:
                 self.on_event("error", {"message": str(exc)})
