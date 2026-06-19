@@ -219,15 +219,15 @@ class BackgroundWorker:
                     model_id=task_model_id,
                     max_tool_iterations_override=task_max_tool_iterations,
                 )
-                    self._save_result(
-                        task_id=task_id,
-                        user_id=task_user_id,
-                        routine_id=task_routine_id,
-                        conversation_id=task_conversation_id,
-                        content_markdown=result_md or "",
-                        token_usage=token_usage,
-                        memory=memory,
-                    )
+                self._save_result(
+                    task_id=task_id,
+                    user_id=task_user_id,
+                    routine_id=task_routine_id,
+                    conversation_id=task_conversation_id,
+                    content_markdown=result_md or "",
+                    token_usage=token_usage,
+                    memory=memory,
+                )
         except UserInputRequired as exc:
             self._mark_waiting(task_id, exc.feed_item_id, exc.memory)
         except Exception as exc:
