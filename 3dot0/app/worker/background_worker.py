@@ -219,14 +219,15 @@ class BackgroundWorker:
                     model_id=task_model_id,
                     max_tool_iterations_override=task_max_tool_iterations,
                 )
-                self._save_result(
-                    task_id=task_id,
-                    user_id=task_user_id,
-                    routine_id=task_routine_id,
-                    conversation_id=task_conversation_id,
-                    content_markdown=result_md or "",
-                    token_usage=token_usage,
-                )
+                    self._save_result(
+                        task_id=task_id,
+                        user_id=task_user_id,
+                        routine_id=task_routine_id,
+                        conversation_id=task_conversation_id,
+                        content_markdown=result_md or "",
+                        token_usage=token_usage,
+                        memory=memory,
+                    )
         except UserInputRequired as exc:
             self._mark_waiting(task_id, exc.feed_item_id, exc.memory)
         except Exception as exc:
@@ -493,7 +494,6 @@ class BackgroundWorker:
         except Exception as exc:
             logger.exception("Failed to save generated routine for task %d", task_id)
             self._mark_failed(task_id, f"Database error: {str(exc)[:200]}")
-
     def _save_result(
         self,
         task_id: int,
@@ -502,11 +502,19 @@ class BackgroundWorker:
         content_markdown: str,
         conversation_id: Optional[int] = None,
         token_usage: Optional[Dict[str, int]] = None,
+        memory: Optional[IntelligentMemoryManager] = None,
     ) -> None:
         """Render markdown, create a FeedItem, update conversation if needed, and mark the task done."""
         content_html = render_markdown(content_markdown)
         title = extract_title(content_markdown, fallback="Report")
         feed_type = self._infer_feed_type(routine_id)
+
+        state_json = None
+        if memory:
+            try:
+                state_json = json.dumps(memory.to_dict(), cls=_BytesEncoder)
+            except Exception as exc:
+                logger.warning("Could not serialize memory state for task %d: %s", task_id, exc)
 
         with session_scope() as session:
             feed_item = FeedItem(
@@ -516,6 +524,7 @@ class BackgroundWorker:
                 title=title,
                 content_markdown=content_markdown,
                 content_html=content_html,
+                last_conversation_state=state_json,
             )
             session.add(feed_item)
             session.flush()

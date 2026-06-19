@@ -96,13 +96,12 @@ function FeedItem({ item, onMarkRead, onReply, onDelete }) {
                       {item.content_markdown}
                     </ReactMarkdown>
                 }
-
-                {/* Reply box for unanswered questions */}
-                {item.type === 'question' && !item.reply_text && (
+                {/* Reply box for unanswered questions or reports */}
+                {(!item.reply_text) && (
                   <ReplyBox item={item} onReply={onReply} />
                 )}
                 {/* Show existing reply */}
-                {item.type === 'question' && item.reply_text && (
+                {item.reply_text && (
                   <div className="mt-3 text-sm text-jarvis-muted border-t border-jarvis-border pt-3">
                     <span className="text-jarvis-cyan/60 text-xs font-mono">Your reply: </span>
                     {item.reply_text}
@@ -226,9 +225,8 @@ export default function FeedPage() {
     await API.bulkDeleteFeed(true, mockMode)
     await load()
   }
-
   const handleReply = async (item, text) => {
-    await API.replyToQuestion(item.id, text, mockMode)
+    await API.replyToFeedItem(item.id, text, mockMode)
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, reply_text: text, is_read: true } : i))
   }
 
