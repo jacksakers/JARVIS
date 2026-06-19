@@ -213,10 +213,12 @@ class FeedItem(SQLModel, table=True):
     content_markdown: str = Field(default="")
     # Pre-rendered HTML for fast serving to the frontend
     content_html: str = Field(default="")
-
     is_read: bool = Field(default=False)
-    # Stored when the user replies to a 'question' type feed item
+    # Stored when the user replies to a feed item
     reply_text: Optional[str] = Field(default=None)
+    # JSON-serialised IntelligentMemoryManager state saved at completion/pause
+    # This allows users to "comment" or "reply" to any report and continue the context.
+    last_conversation_state: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships

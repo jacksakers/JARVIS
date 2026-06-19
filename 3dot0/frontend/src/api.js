@@ -41,7 +41,7 @@ export const markAllRead   = (mock)     => post('/api/v1/feed/read-all',       n
 export const deleteFeedItem = (id, mock) => del(`/api/v1/feed/${id}`,          mock, () => null)
 export const bulkDeleteFeed = (readOnly = true, mock) =>
   del(`/api/v1/feed/?read_only=${readOnly}`, mock, () => ({ deleted: 0 }))
-export const replyToQuestion = (id, replyText, mock) =>
+export const replyToFeedItem = (id, replyText, mock) =>
   post(`/api/v1/feed/${id}/reply`, { reply_text: replyText }, mock, () => null)
 
 // ── Tasks ─────────────────────────────────────────────────────────────────
