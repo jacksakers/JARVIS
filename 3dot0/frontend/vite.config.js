@@ -2,6 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { webcrypto } from 'node:crypto'
+
+// Polyfill crypto for Node.js environments where it might be missing (e.g. some Node 18/20 builds)
+if (!globalThis.crypto) {
+  globalThis.crypto = webcrypto
+}
 
 export default defineConfig({
   plugins: [
