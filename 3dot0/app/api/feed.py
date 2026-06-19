@@ -111,129 +111,76 @@ class ReplyPayload(dict):
 @router.post("/{item_id}/reply", response_model=FeedItemRead)
 
 def reply_to_item(
-
     item_id: int,
-
     payload: dict,
-
     session: Session = Depends(get_session),
 
 ):
-
     """
-
     Submit a user reply to a feed item (question or report).
-
     This re-queues the associated task (or creates a continuation) so the agent can continue.
-
     """
 
     item = session.get(FeedItem, item_id)
-
     if not item:
-
         raise HTTPException(status_code=404, detail="Feed item not found.")
 
 
     reply_text = payload.get("reply_text", "").strip()
-
     if not reply_text:
-
         raise HTTPException(status_code=422, detail="reply_text is required.")
 
-
     # Store the reply
-
     item.reply_text = reply_text
-
     item.is_read = True
 
     session.add(item)
 
-
     if item.type == FeedItemType.question:
-
         # Standard ask_user flow
-
         from sqlmodel import select as sel
-
         waiting_task = session.exec(
-
             sel(Task).where(Task.question_feed_item_id == item_id)
-
         ).first()
 
-
         if waiting_task and waiting_task.status == TaskStatus.waiting:
-
             waiting_task.prompt = f"[User reply]: {reply_text}"
-
             waiting_task.status = TaskStatus.queued
-
             waiting_task.question_feed_item_id = None
-
             session.add(waiting_task)
-
             manager.broadcast_from_thread(
-
                 "task_queued",
-
                 {"task_id": waiting_task.id, "prompt": waiting_task.prompt[:100]},
-
             )
 
     else:
-
         # Report/Briefing comment flow — create a NEW continuation task
-
         original_task = None
-
         if item.task_id:
-
             original_task = session.get(Task, item.task_id)
 
-
         new_task = Task(
-
             user_id=item.user_id,
-
             prompt=f"[User comment on {item.title}]: {reply_text}",
-
             status=TaskStatus.queued,
-
             conversation_state=item.last_conversation_state,
-
         )
-
 
         if original_task:
-
             new_task.routine_id = original_task.routine_id
-
             new_task.system_prompt_override = original_task.system_prompt_override
-
             new_task.conversation_id = original_task.conversation_id
-
             new_task.model_id = original_task.model_id
-
             new_task.allowed_skill_names_override = original_task.allowed_skill_names_override
 
-
         session.add(new_task)
-
         session.flush()
-
         manager.broadcast_from_thread(
-
             "task_queued",
-
             {"task_id": new_task.id, "prompt": new_task.prompt[:100]},
-
         )
 
-
     session.commit()
-
     session.refresh(item)
-
+    
     return item
