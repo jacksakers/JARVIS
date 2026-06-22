@@ -458,12 +458,11 @@ export default function DevelopmentPage() {
       setActionLoading(false)
     }
   }
-
   const handleRequestChanges = async () => {
     if (!activePR || !feedback.trim()) return
     setActionLoading(true)
     try {
-      const res = await API.requestDevChanges(activePR.id, feedback.trim(), mockMode)
+      const res = await API.requestDevChanges(activePR.id, feedback.trim(), mockMode, selectedModelId)
       setActiveTaskId(res.task_id)
       setDevTaskState({ taskId: res.task_id, projectName: activePR.project_name, taskStatus: 'queued', prId: null })
       setTaskEvents([{ type: 'status', message: 'Change request sent — JARVIS is revising…' }])
@@ -796,12 +795,19 @@ export default function DevelopmentPage() {
                         Cancel PR
                       </button>
                     </div>
-
                     {/* Request Changes */}
                     <div className="glass rounded-xl p-4 border border-jarvis-border">
-                      <div className="flex items-center gap-2 mb-2">
-                        <MessageSquare size={13} className="text-jarvis-muted" />
-                        <span className="text-sm font-semibold text-white">Request Changes</span>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare size={13} className="text-jarvis-muted" />
+                          <span className="text-sm font-semibold text-white">Request Changes</span>
+                        </div>
+                        <ModelPicker
+                          value={selectedModelId}
+                          onChange={setSelectedModelId}
+                          placeholder="Model for revisions"
+                          compact
+                        />
                       </div>
                       <textarea
                         value={feedback}
