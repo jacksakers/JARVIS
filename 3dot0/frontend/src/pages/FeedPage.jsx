@@ -151,6 +151,7 @@ function ReplyBox({ item, onReply }) {
           onChange={setModelId}
           placeholder="Model for response"
           className="w-full sm:w-auto"
+          up={true}
         />
       </div>
     </div>

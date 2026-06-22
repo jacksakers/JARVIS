@@ -33,8 +33,9 @@ function ModelIcon({ provider }) {
  * @param {string}       [placeholder] — text shown when null/"default" is selected
  * @param {string}       [className]
  * @param {boolean}      [compact]   — true = icon-only trigger with tooltip
+ * @param {boolean}      [up]        — true = open dropdown upwards
  */
-export default function ModelPicker({ value, onChange, placeholder = 'Default model', className, compact = false }) {
+export default function ModelPicker({ value, onChange, placeholder = 'Default model', className, compact = false, up = false }) {
   const [models, setModels]     = useState(DEFAULT_MODELS)
   const [open,   setOpen]       = useState(false)
   const ref                     = useRef(null)
@@ -83,7 +84,10 @@ export default function ModelPicker({ value, onChange, placeholder = 'Default mo
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 min-w-[260px] glass rounded-xl border border-jarvis-border shadow-xl overflow-hidden">
+        <div className={clsx(
+          "absolute z-50 left-0 min-w-[260px] glass rounded-xl border border-jarvis-border shadow-xl overflow-hidden",
+          up ? "bottom-full mb-1" : "top-full mt-1"
+        )}>
           {/* Default option */}
           <button
             type="button"
