@@ -176,7 +176,6 @@ function ReplyBox({ item, onReply }) {
       </div>
 
       <div className="flex justify-start">
-
         <ModelPicker
 
           value={modelId}
@@ -186,6 +185,8 @@ function ReplyBox({ item, onReply }) {
           placeholder="Model for response"
 
           className="w-full sm:w-auto"
+
+          up
 
         />
 
