@@ -362,8 +362,10 @@ def request_changes(pr_id: int, payload: dict, session: Session = Depends(get_se
         raise HTTPException(status_code=404, detail="PR not found.")
     if pr.status != DevPRStatus.pending:
         raise HTTPException(status_code=400, detail=f"PR is already {pr.status.value}.")
-
+    
     feedback = payload.get("feedback", "").strip()
+    model_id = payload.get("model_id")
+
     if not feedback:
         raise HTTPException(status_code=422, detail="feedback is required.")
 
@@ -389,6 +391,7 @@ def request_changes(pr_id: int, payload: dict, session: Session = Depends(get_se
         system_prompt_override=_DEV_SYSTEM_PROMPT,
         allowed_skill_names_override=json.dumps(_DEV_SKILL_NAMES),
         status=TaskStatus.queued,
+        model_id=model_id,
     )
     session.add(task)
     session.commit()

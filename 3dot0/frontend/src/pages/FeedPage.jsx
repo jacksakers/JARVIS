@@ -9,6 +9,7 @@ const parseUTC = s => s ? new Date(s.endsWith('Z') || s.includes('+') ? s : s + 
 import { GlassPanel, Badge, Button, EmptyState, Spinner, SectionHeader, IconButton } from '../components/ui'
 import useStore from '../store'
 import * as API from '../api'
+import ModelPicker from '../components/ModelPicker'
 import clsx from 'clsx'
 
 const FILTERS = ['all', 'briefing', 'report', 'reflection', 'question', 'action', 'error']
@@ -119,28 +120,39 @@ function FeedItem({ item, onMarkRead, onReply, onDelete }) {
 function ReplyBox({ item, onReply }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [modelId, setModelId] = useState(null)
 
   const send = async () => {
     if (!text.trim()) return
     setSending(true)
-    await onReply?.(item, text)
+    await onReply?.(item, text, modelId)
     setText('')
     setSending(false)
   }
 
   return (
-    <div className="mt-4 flex gap-2">
-      <input
-        value={text}
-        onChange={e => setText(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-        placeholder="Type your reply…"
-        className="flex-1 glass rounded-lg px-3 py-2 text-sm text-jarvis-text placeholder:text-jarvis-muted/60 outline-none focus:border-jarvis-cyan/50"
-      />
-      <Button variant="primary" size="sm" onClick={send} disabled={sending || !text.trim()}>
-        {sending ? <Spinner size={14} /> : <MessageSquare size={14} />}
-        Reply
-      </Button>
+    <div className="mt-4 flex flex-col gap-2">
+      <div className="flex gap-2">
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+          placeholder="Type your reply…"
+          className="flex-1 glass rounded-lg px-3 py-2 text-sm text-jarvis-text placeholder:text-jarvis-muted/60 outline-none focus:border-jarvis-cyan/50"
+        />
+        <Button variant="primary" size="sm" onClick={send} disabled={sending || !text.trim()}>
+          {sending ? <Spinner size={14} /> : <MessageSquare size={14} />}
+          Reply
+        </Button>
+      </div>
+      <div className="flex justify-start">
+        <ModelPicker
+          value={modelId}
+          onChange={setModelId}
+          placeholder="Model for response"
+          className="w-full sm:w-auto"
+        />
+      </div>
     </div>
   )
 }
@@ -225,8 +237,9 @@ export default function FeedPage() {
     await API.bulkDeleteFeed(true, mockMode)
     await load()
   }
-  const handleReply = async (item, text) => {
-    await API.replyToFeedItem(item.id, text, mockMode)
+
+  const handleReply = async (item, text, modelId) => {
+    await API.replyToFeedItem(item.id, text, mockMode, modelId)
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, reply_text: text, is_read: true } : i))
   }
 

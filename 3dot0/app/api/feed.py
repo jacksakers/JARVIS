@@ -125,8 +125,9 @@ def reply_to_item(
     if not item:
         raise HTTPException(status_code=404, detail="Feed item not found.")
 
-
     reply_text = payload.get("reply_text", "").strip()
+    model_id = payload.get("model_id")
+
     if not reply_text:
         raise HTTPException(status_code=422, detail="reply_text is required.")
 
@@ -147,6 +148,8 @@ def reply_to_item(
             waiting_task.prompt = f"[User reply]: {reply_text}"
             waiting_task.status = TaskStatus.queued
             waiting_task.question_feed_item_id = None
+            if model_id:
+                waiting_task.model_id = model_id
             session.add(waiting_task)
             manager.broadcast_from_thread(
                 "task_queued",
@@ -164,13 +167,15 @@ def reply_to_item(
             prompt=f"[User comment on {item.title}]: {reply_text}",
             status=TaskStatus.queued,
             conversation_state=item.last_conversation_state,
+            model_id=model_id,
         )
 
         if original_task:
             new_task.routine_id = original_task.routine_id
             new_task.system_prompt_override = original_task.system_prompt_override
             new_task.conversation_id = original_task.conversation_id
-            new_task.model_id = original_task.model_id
+            if not model_id:
+                new_task.model_id = original_task.model_id
             new_task.allowed_skill_names_override = original_task.allowed_skill_names_override
 
         session.add(new_task)

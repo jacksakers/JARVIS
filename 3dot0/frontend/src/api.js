@@ -41,8 +41,11 @@ export const markAllRead   = (mock)     => post('/api/v1/feed/read-all',       n
 export const deleteFeedItem = (id, mock) => del(`/api/v1/feed/${id}`,          mock, () => null)
 export const bulkDeleteFeed = (readOnly = true, mock) =>
   del(`/api/v1/feed/?read_only=${readOnly}`, mock, () => ({ deleted: 0 }))
-export const replyToFeedItem = (id, replyText, mock) =>
-  post(`/api/v1/feed/${id}/reply`, { reply_text: replyText }, mock, () => null)
+export const replyToFeedItem = (id, replyText, mock, modelId) =>
+  post(`/api/v1/feed/${id}/reply`, {
+    reply_text: replyText,
+    ...(modelId ? { model_id: modelId } : {}),
+  }, mock, () => null)
 
 // ── Tasks ─────────────────────────────────────────────────────────────────
 
@@ -140,5 +143,8 @@ export const getDevPR           = (id, mock)       => get(`/api/v1/dev/prs/${id}
 export const mergeDevPR         = (id, mock)       => post(`/api/v1/dev/prs/${id}/merge`, null, mock, () => null)
 export const discardDevPR       = (id, mock)       => post(`/api/v1/dev/prs/${id}/discard`, null, mock, () => null)
 export const cancelDevPR        = (id, mock)       => post(`/api/v1/dev/prs/${id}/cancel`, null, mock, () => null)
-export const requestDevChanges  = (id, feedback, mock) => post(`/api/v1/dev/prs/${id}/request-changes`, { feedback }, mock, () => null)
+export const requestDevChanges  = (id, feedback, mock, modelId) => post(`/api/v1/dev/prs/${id}/request-changes`, {
+  feedback,
+  ...(modelId ? { model_id: modelId } : {}),
+}, mock, () => null)
 export const createDevTask      = (project_name, description, mock, modelId, maxToolIterations) => post('/api/v1/dev/task', { project_name, description, ...(modelId ? { model_id: modelId } : {}), ...(maxToolIterations ? { max_tool_iterations: maxToolIterations } : {}) }, mock, () => null)
