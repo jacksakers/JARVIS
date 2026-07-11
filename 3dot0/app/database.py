@@ -82,6 +82,8 @@ def _run_migrations() -> None:
             # Per-task max tool iterations override
             ("tasks", "max_tool_iterations", "ALTER TABLE tasks ADD COLUMN max_tool_iterations INTEGER DEFAULT NULL"),
             ("feed_items",      "last_conversation_state",   "ALTER TABLE feed_items ADD COLUMN last_conversation_state TEXT DEFAULT NULL"),
+            ("tasks", "task_events", "ALTER TABLE tasks ADD COLUMN task_events TEXT DEFAULT '[]'"),
+            ("tasks", "pause_requested", "ALTER TABLE tasks ADD COLUMN pause_requested INTEGER NOT NULL DEFAULT 0"),
         ]
 
         for table, column, sql in migrations:

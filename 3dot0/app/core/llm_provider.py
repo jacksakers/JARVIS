@@ -32,15 +32,26 @@ class TokenUsage:
             thinking_tokens=self.thinking_tokens + other.thinking_tokens,
         )
 
-
 @dataclass
+
 class StreamChunk:
+
     """Provider-agnostic streaming chunk. Carries content and/or tool calls."""
+
     content: str = ""
+
+    # Gemini thinking models text (or thinking process)
+
+    thought: str = ""
+
     # A chunk may carry multiple tool calls (Gemma4 / parallel tool calling)
+
     tool_calls: Optional[List[ToolCall]] = field(default=None)
+
     done: bool = False
+
     # Token usage — only populated on the final chunk (done=True) for Gemini
+
     usage: Optional[TokenUsage] = field(default=None)
 
 
@@ -83,15 +94,18 @@ class BaseLLM(ABC):
         for a direct non-streaming API call when available.
         """
         content = ""
+        thought = ""
         tool_calls: Optional[List[ToolCall]] = None
         usage: Optional[TokenUsage] = None
         for chunk in self.stream(messages, tools):
             content += chunk.content
+            if getattr(chunk, "thought", None):
+                thought += chunk.thought
             if chunk.tool_calls:
                 tool_calls = (tool_calls or []) + chunk.tool_calls
             if chunk.usage:
                 usage = (usage + chunk.usage) if usage else chunk.usage
-        return StreamChunk(content=content, tool_calls=tool_calls, done=True, usage=usage)
+        return StreamChunk(content=content, thought=thought, tool_calls=tool_calls, done=True, usage=usage)
 
     @abstractmethod
     def test_connection(self) -> bool:

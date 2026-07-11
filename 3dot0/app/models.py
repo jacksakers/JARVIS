@@ -183,6 +183,10 @@ class Task(SQLModel, table=True):
     routine_generation_config: Optional[str] = Field(default=None)
     # Per-task override for the maximum number of tool call iterations (None = use config default)
     max_tool_iterations: Optional[int] = Field(default=None)
+    # JSON-serialised execution events/logs (tool calls, results, etc.)
+    task_events: Optional[str] = Field(default="[]")
+    # Flag to request pause
+    pause_requested: bool = Field(default=False)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Field(default=None)
@@ -412,22 +416,40 @@ class TaskCreate(SQLModel):
     conversation_id: Optional[int] = None
     model_id: Optional[str] = None
 
-
 class TaskRead(SQLModel):
+
     id: int
+
     user_id: int
+
     routine_id: Optional[int]
+
     conversation_id: Optional[int]
+
     prompt: str
+
     status: TaskStatus
+
     error_message: Optional[str]
+
     question_feed_item_id: Optional[int]
+
     model_id: Optional[str]
+
     tokens_prompt: int = 0
+
     tokens_completion: int = 0
+
     tokens_thinking: int = 0
+
+    task_events: Optional[str] = "[]"
+
+    pause_requested: bool = False
+
     created_at: datetime
+
     started_at: Optional[datetime]
+
     completed_at: Optional[datetime]
 
 

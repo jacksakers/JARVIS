@@ -147,13 +147,14 @@ def get_active_dev_task(session: Session = Depends(get_session)):
                 task = None
         except Exception:
             task = None
-
     if task:
         result["task"] = {
             "id": task.id,
             "status": task.status,
             "prompt": task.prompt[:200],
             "created_at": task.created_at.isoformat(),
+            "task_events": _json.loads(task.task_events or "[]"),
+            "pause_requested": task.pause_requested,
         }
         # Extract project name from prompt (format: "Repository: <name>\n\n...")
         project_name = None
@@ -444,7 +445,6 @@ def create_dev_task(payload: dict, session: Session = Depends(get_session)):
     session.add(task)
     session.commit()
     session.refresh(task)
-
     from app.worker.connection_manager import manager
     manager.broadcast_from_thread(
         "task_queued",
@@ -452,3 +452,27 @@ def create_dev_task(payload: dict, session: Session = Depends(get_session)):
     )
 
     return {"task_id": task.id, "project_name": project_name}
+
+
+@router.post("/task/{task_id}/pause")
+def pause_dev_task(task_id: int, session: Session = Depends(get_session)):
+    """Request that the running task be paused before its next step."""
+    task = session.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found.")
+    if task.status != TaskStatus.running:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot pause a task that is in status '{task.status.value}'."
+        )
+    task.pause_requested = True
+    session.add(task)
+    session.commit()
+
+    from app.worker.connection_manager import manager
+    manager.broadcast_from_thread(
+        "status",
+        {"task_id": task_id, "message": "Pause requested… JARVIS will pause before the next step."}
+    )
+
+    return {"message": "Pause requested."}

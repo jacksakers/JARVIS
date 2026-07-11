@@ -98,16 +98,22 @@ class GeminiProvider(BaseLLM):
                 contents.append(types.Content(role="user", parts=parts))
 
         return system_instruction, contents
-
     def _process_response(self, response: Any, done: bool = False) -> StreamChunk:
         """Helper to extract text and native tool calls from a Gemini response/chunk."""
         content = ""
+        thought_content = ""
         tool_calls = None
         usage = None
 
         if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
             for part in response.candidates[0].content.parts:
-                if getattr(part, "text", None):
+                is_thought = getattr(part, "thought", False)
+                if is_thought:
+                    if isinstance(is_thought, str):
+                        thought_content += is_thought
+                    elif getattr(part, "text", None):
+                        thought_content += part.text
+                elif getattr(part, "text", None):
                     content += part.text
                 elif getattr(part, "function_call", None):
                     if tool_calls is None:
@@ -140,7 +146,7 @@ class GeminiProvider(BaseLLM):
                 thinking_tokens=getattr(meta, "thoughts_token_count", 0) or 0,
             )
 
-        return StreamChunk(content=content, tool_calls=tool_calls, done=done, usage=usage)
+        return StreamChunk(content=content, thought=thought_content, tool_calls=tool_calls, done=done, usage=usage)
 
     # ── BaseLLM interface ─────────────────────────────────────────────────────
 

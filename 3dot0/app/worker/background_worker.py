@@ -338,13 +338,28 @@ class BackgroundWorker:
                             i += 1
                     if prior_msgs:
                         logger.info("Task %d: loaded %d prior messages as context.", task_id, len(prior_msgs))
-
         # Capture token usage emitted by the agent loop
         _token_usage: Dict[str, int] = {}
 
         def on_event(event_type: str, data: Dict[str, Any]) -> None:
             if event_type == "token_usage":
                 _token_usage.update(data)
+            try:
+                from app.database import session_scope
+                from app.models import Task
+                with session_scope() as session:
+                    task = session.get(Task, task_id)
+                    if task:
+                        try:
+                            current_events = json.loads(task.task_events or "[]")
+                        except Exception:
+                            current_events = []
+                        current_events.append({"type": event_type, **data})
+                        task.task_events = json.dumps(current_events)
+                        session.add(task)
+            except Exception as exc:
+                logger.warning("Failed to save event %s for task %d: %s", event_type, task_id, exc)
+
             manager.broadcast_from_thread(event_type, {"task_id": task_id, **data})
 
         # Set thread-local task_id so skills like ask_user can reference it
@@ -358,6 +373,7 @@ class BackgroundWorker:
             registry=self._registry,
             memory=memory,
             on_event=on_event,
+            task_id=task_id,
         )
 
         # Dev tasks need more iterations (explore → search → read → branch → edit × N → commit)

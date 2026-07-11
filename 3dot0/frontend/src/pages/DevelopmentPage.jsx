@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   GitBranch, GitMerge, GitPullRequest, Folder, Play, X, Check,
   ChevronRight, ChevronDown, Terminal, RefreshCw, AlertCircle, Code2, Trash2,
-  MessageSquare, ArrowLeft, FileCode, Copy,
+  MessageSquare, ArrowLeft, FileCode, Copy, Pause,
 } from 'lucide-react'
 import clsx from 'clsx'
 import * as API from '../api'
@@ -176,36 +176,97 @@ function TreeViewer({ tree }) {
 // ── Task progress event ───────────────────────────────────────────────────
 
 function EventLine({ ev }) {
+
   if (ev.type === 'tool_call') {
+
     return (
+
       <div className="flex items-center gap-2 text-xs font-mono py-0.5">
+
         <Terminal size={11} className="text-jarvis-cyan shrink-0" />
+
         <span className="text-jarvis-muted">Calling</span>
+
         <span className="text-jarvis-cyan">{ev.name}</span>
+
         {ev.args && (
+
           <span className="text-jarvis-muted/60 truncate max-w-xs">
+
             ({JSON.stringify(ev.args).slice(0, 80)})
+
           </span>
+
         )}
+
       </div>
+
     )
+
   }
+
   if (ev.type === 'tool_result') {
+
     return (
+
       <div className="flex items-center gap-2 text-xs font-mono py-0.5">
+
         <Check size={11} className="text-green-400 shrink-0" />
+
         <span className="text-green-400/80 truncate max-w-sm">{String(ev.result ?? '').slice(0, 120)}</span>
+
       </div>
+
     )
+
   }
-  if (ev.type === 'status') {
+
+  if (ev.type === 'thought') {
+
     return (
-      <div className="flex items-center gap-2 text-xs py-0.5">
-        <span className="text-jarvis-muted/60">{ev.message}</span>
+
+      <div className="flex flex-col gap-1 text-xs py-1.5 px-3 bg-amber-500/5 border-l-2 border-amber-500/40 rounded font-mono my-1">
+
+        <span className="text-[10px] text-amber-500/70 uppercase tracking-wider font-semibold">Thinking Process</span>
+
+        <span className="text-jarvis-muted whitespace-pre-wrap">{ev.message}</span>
+
       </div>
+
     )
+
   }
+
+  if (ev.type === 'content_chunk') {
+
+    return (
+
+      <div className="flex items-center gap-2 text-xs py-0.5 font-mono">
+
+        <span className="text-jarvis-muted">{ev.content}</span>
+
+      </div>
+
+    )
+
+  }
+
+  if (ev.type === 'status') {
+
+    return (
+
+      <div className="flex items-center gap-2 text-xs py-0.5">
+
+        <span className="text-jarvis-muted/60">{ev.message}</span>
+
+      </div>
+
+    )
+
+  }
+
   return null
+
 }
 
 // ── Main DevelopmentPage ──────────────────────────────────────────────────
@@ -258,15 +319,18 @@ export default function DevelopmentPage() {
         loadAndShowPR(active.pr.id)
         return
       }
-
       if (active.task) {
-        const { id: taskId, status: taskSt, project_name: projectName } = active.task
+        const { id: taskId, status: taskSt, project_name: projectName, task_events: savedEvents } = active.task
         const proj = projs.find(p => p.name === projectName)
         if (proj) {
           setSelectedProject(proj)
           setActiveTaskId(taskId)
           setTaskStatus(taskSt)
-          setTaskEvents([{ type: 'status', message: `Task #${taskId} is ${taskSt} — waiting for updates…` }])
+          if (savedEvents && savedEvents.length > 0) {
+            setTaskEvents(savedEvents)
+          } else {
+            setTaskEvents([{ type: 'status', message: `Task #${taskId} is ${taskSt} — waiting for updates…` }])
+          }
           setView('workspace')
           // Persist so WS events reconnect correctly
           setDevTaskState({ taskId, projectName, taskStatus: taskSt, prId: null })
@@ -309,6 +373,12 @@ export default function DevelopmentPage() {
     }
     if (event === 'tool_result' && data.task_id === tid) {
       setTaskEvents(prev => [...prev, { type: 'tool_result', result: data.result }])
+    }
+    if (event === 'thought' && data.task_id === tid) {
+      setTaskEvents(prev => [...prev, { type: 'thought', message: data.message }])
+    }
+    if (event === 'content_chunk' && data.task_id === tid) {
+      setTaskEvents(prev => [...prev, { type: 'content_chunk', content: data.content }])
     }
     if (event === 'status' && data.task_id === tid) {
       setTaskEvents(prev => [...prev, { type: 'status', message: data.message }])
@@ -387,7 +457,6 @@ export default function DevelopmentPage() {
       setView('workspace')
     }
   }
-
   const submitTask = async () => {
     if (!description.trim() || !selectedProject || submitting) return
     setSubmitting(true)
@@ -403,6 +472,21 @@ export default function DevelopmentPage() {
       setTaskEvents([{ type: 'status', message: `Failed to queue: ${err.message}` }])
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const [pausingTask, setPausingTask] = useState(false)
+
+  const handlePauseTask = async () => {
+    if (!activeTaskId || pausingTask) return
+    setPausingTask(true)
+    try {
+      await API.pauseDevTask(activeTaskId, mockMode)
+      setTaskEvents(prev => [...prev, { type: 'status', message: 'Pause requested. JARVIS will pause before the next step.' }])
+    } catch (err) {
+      setTaskEvents(prev => [...prev, { type: 'status', message: `Failed to pause: ${err.message}` }])
+    } finally {
+      setPausingTask(false)
     }
   }
 
@@ -681,10 +765,20 @@ export default function DevelopmentPage() {
                       Progress
                     </span>
                     {taskStatus === 'running' && (
-                      <span className="ml-auto flex items-center gap-1.5 text-xs text-jarvis-cyan">
-                        <span className="w-1.5 h-1.5 rounded-full bg-jarvis-cyan animate-pulse" />
-                        Working…
-                      </span>
+                      <div className="ml-auto flex items-center gap-3">
+                        <span className="flex items-center gap-1.5 text-xs text-jarvis-cyan">
+                          <span className="w-1.5 h-1.5 rounded-full bg-jarvis-cyan animate-pulse" />
+                          Working…
+                        </span>
+                        <button
+                          onClick={handlePauseTask}
+                          disabled={pausingTask}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded border border-amber-500/50 text-[10px] text-amber-500 font-semibold uppercase hover:bg-amber-500/10 disabled:opacity-40 transition-all cursor-pointer"
+                        >
+                          <Pause size={10} />
+                          {pausingTask ? 'Pausing…' : 'Pause & Feedback'}
+                        </button>
+                      </div>
                     )}
                     {taskStatus === 'done' && (
                       <span className="ml-auto text-xs text-green-400">Complete</span>

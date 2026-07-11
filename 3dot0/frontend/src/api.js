@@ -148,3 +148,4 @@ export const requestDevChanges  = (id, feedback, mock, modelId) => post(`/api/v1
   ...(modelId ? { model_id: modelId } : {}),
 }, mock, () => null)
 export const createDevTask      = (project_name, description, mock, modelId, maxToolIterations) => post('/api/v1/dev/task', { project_name, description, ...(modelId ? { model_id: modelId } : {}), ...(maxToolIterations ? { max_tool_iterations: maxToolIterations } : {}) }, mock, () => null)
+export const pauseDevTask       = (id, mock)       => post(`/api/v1/dev/task/${id}/pause`, null, mock, () => null)

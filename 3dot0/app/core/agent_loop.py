@@ -56,7 +56,6 @@ class AgentLoop:
     """
 
     MAX_TOOL_ITERATIONS = 6
-
     def __init__(
         self,
         llm: BaseLLM,
@@ -64,12 +63,14 @@ class AgentLoop:
         memory: IntelligentMemoryManager,
         on_event: Optional[EventCallback] = None,
         stop_event: Optional[threading.Event] = None,
+        task_id: Optional[int] = None,
     ) -> None:
         self.llm = llm
         self.registry = registry
         self.memory = memory
         self.on_event = on_event or (lambda _t, _d: None)
         self.stop_event = stop_event or threading.Event()
+        self.task_id = task_id
         # Accumulated token usage across all LLM calls in this turn
         self._accumulated_usage: TokenUsage = TokenUsage()
 
@@ -104,12 +105,54 @@ class AgentLoop:
         # Empty tool list → send None so the LLM doesn't get an empty array
         if tools is not None and len(tools) == 0:
             tools = None
-
         content = ""
         for iteration in range(max_iters):
             if self.stop_event.is_set():
                 self.memory.close_turn()
                 return None
+
+            if self.task_id:
+                try:
+                    from app.database import session_scope
+                    from app.models import Task, FeedItem, FeedItemType
+                    from app.core.markdown_utils import render_markdown
+
+                    with session_scope() as session:
+                        task = session.get(Task, self.task_id)
+                        if task and task.pause_requested:
+                            task.pause_requested = False
+                            session.add(task)
+                            session.flush()
+
+                            title = "Task Paused"
+                            content_md = (
+                                f"## Task Paused\n\n"
+                                f"JARVIS is paused on task #{self.task_id}. "
+                                f"Please provide your feedback or instructions below to resume."
+                            )
+                            content_html = render_markdown(content_md)
+
+                            feed_item = FeedItem(
+                                user_id=task.user_id,
+                                task_id=self.task_id,
+                                type=FeedItemType.question,
+                                title=title,
+                                content_markdown=content_md,
+                                content_html=content_html,
+                                is_read=False,
+                            )
+                            session.add(feed_item)
+                            session.flush()
+                            feed_item_id = feed_item.id
+
+                            raise UserInputRequired(
+                                feed_item_id=feed_item_id,
+                                memory=self.memory,
+                            )
+                except UserInputRequired:
+                    raise
+                except Exception:
+                    pass
 
             messages = self.memory.get_messages()
             # On the final iteration suppress tools to force a plain-text response
@@ -209,6 +252,8 @@ class AgentLoop:
                 chunk = self.llm.chat(messages, tools=tools)
                 if chunk.usage:
                     self._accumulated_usage = self._accumulated_usage + chunk.usage
+                if getattr(chunk, "thought", None):
+                    self.on_event("thought", {"message": chunk.thought})
                 return chunk.content, chunk.tool_calls or None
             except Exception as exc:
                 self.on_event("error", {"message": str(exc)})
@@ -220,8 +265,11 @@ class AgentLoop:
                 for chunk in self.llm.stream(messages, tools=None):
                     if self.stop_event.is_set():
                         break
+                    if getattr(chunk, "thought", None):
+                        self.on_event("thought", {"message": chunk.thought})
                     if chunk.content:
                         content += chunk.content
+                        self.on_event("content_chunk", {"content": chunk.content})
                     if chunk.usage:
                         self._accumulated_usage = self._accumulated_usage + chunk.usage
             except Exception as exc:

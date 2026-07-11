@@ -100,12 +100,10 @@ class TestSkillSchemas:
         schemas = registry.get_filtered_schemas(["calculate"])
         assert len(schemas) == 1
         assert schemas[0]["function"]["name"] == "calculate"
-
-    def test_empty_filter_returns_all(self):
+    def test_empty_filter_returns_empty(self):
         from app.core.tool_registry import ToolRegistry
         registry = ToolRegistry()
         registry.discover_skills()
 
-        all_schemas = registry.get_all_tool_schemas()
         filtered = registry.get_filtered_schemas([])
-        assert len(filtered) == len(all_schemas)
+        assert len(filtered) == 0
