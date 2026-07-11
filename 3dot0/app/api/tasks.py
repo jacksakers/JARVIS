@@ -79,11 +79,6 @@ def cancel_task(task_id: int, session: Session = Depends(get_session)):
     task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found.")
-    if task.status != TaskStatus.queued:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot cancel a task with status '{task.status}'.",
-        )
     session.delete(task)
     session.commit()
 

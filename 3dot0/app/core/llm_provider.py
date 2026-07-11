@@ -35,23 +35,14 @@ class TokenUsage:
 @dataclass
 
 class StreamChunk:
-
     """Provider-agnostic streaming chunk. Carries content and/or tool calls."""
-
     content: str = ""
-
     # Gemini thinking models text (or thinking process)
-
     thought: str = ""
-
     # A chunk may carry multiple tool calls (Gemma4 / parallel tool calling)
-
     tool_calls: Optional[List[ToolCall]] = field(default=None)
-
     done: bool = False
-
     # Token usage — only populated on the final chunk (done=True) for Gemini
-
     usage: Optional[TokenUsage] = field(default=None)
 
 
